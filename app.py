@@ -7,7 +7,7 @@ tkinter = tkinter.Tk()
 screen_width = tkinter.winfo_screenwidth()
 screen_height = tkinter.winfo_screenheight()
 app_width = 800
-app_height = 600
+app_height = 650
 
 
 def resource_path(relative_path):
@@ -49,8 +49,8 @@ with gui.file_dialog(directory_selector = False, show = False, modal = True,
 
 with gui.theme() as test_theme:
     with gui.theme_component(gui.mvAll):
-        gui.add_theme_style(gui.mvStyleVar_FrameRounding, 2, category = gui.mvThemeCat_Core)
-        gui.add_theme_color(gui.mvThemeCol_TabActive, (150, 15, 30), category = gui.mvThemeCat_Core)
+        gui.add_theme_style(gui.mvStyleVar_FrameRounding, 0, category = gui.mvThemeCat_Core)
+        '''gui.add_theme_color(gui.mvThemeCol_TabActive, (150, 15, 30), category = gui.mvThemeCat_Core)
         gui.add_theme_color(gui.mvThemeCol_TabHovered, (100, 10, 15), category = gui.mvThemeCat_Core)
         gui.add_theme_color(gui.mvThemeCol_ButtonActive, (150, 15, 30), category = gui.mvThemeCat_Core)
         gui.add_theme_color(gui.mvThemeCol_ButtonHovered, (100, 10, 15), category = gui.mvThemeCat_Core)
@@ -60,7 +60,7 @@ with gui.theme() as test_theme:
         gui.add_theme_color(gui.mvThemeCol_HeaderHovered, (100, 10, 15), category = gui.mvThemeCat_Core)
         gui.add_theme_color(gui.mvThemeCol_HeaderActive, (150, 15, 30), category = gui.mvThemeCat_Core)
         gui.add_theme_color(gui.mvThemeCol_SliderGrab, (255, 255, 255), category = gui.mvThemeCat_Core)
-        gui.add_theme_color(gui.mvThemeCol_SliderGrabActive, (192, 192, 192), category = gui.mvThemeCat_Core)
+        gui.add_theme_color(gui.mvThemeCol_SliderGrabActive, (192, 192, 192), category = gui.mvThemeCat_Core)'''
 
 
 with gui.window(tag = "main_window"):
@@ -68,10 +68,11 @@ with gui.window(tag = "main_window"):
     with gui.group(horizontal = True):
         with gui.tab_bar():
             with gui.tab(label = "Настройки сетей"):
-                with gui.child_window(tag = "child_head", height = int(app_height * 0.755), border = False):
+                with gui.child_window(tag = "child_head", height = int(app_height - 150), border = False):
                     with gui.tab_bar(tag = "tab_bar_main_panel"):
                         gui.add_tab_button(label = "+", tag = "tab_button_add_lora_tab", callback = callbacks.add_lora_tab)
                 with gui.child_window(tag = "child_footer", height = -1, border = False):
+                    gui.add_separator()
                     with gui.group(horizontal = True):
                         button_sdscripts_path = callbacks.path_button(tag = "button_sdscripts_path",
                                                                       path_type = "folder",
@@ -85,10 +86,10 @@ with gui.window(tag = "main_window"):
                                        before = "combo_lora_list")
                         gui.add_button(label = "Запустить", callback = lambda: gui.show_item("modal_run"),
                                        width = -1, tag = "button_run")
-            with gui.tab(label = "Консоль", tag = "tab_console"):
+            '''with gui.tab(label = "Консоль", tag = "tab_console"):
                 with gui.child_window():
-                    gui.add_text("помогите мне её сделать :(", tag = "text_console")
-            gui.add_tab_button(label = "Гайд", callback = callbacks.open_link_guide, trailing = True)
+                    gui.add_text("", tag = "text_console") # помогите мне её сделать :(
+            gui.add_tab_button(label = "Гайд", callback = callbacks.open_link_guide, trailing = True)'''
 
     with gui.window(tag = "modal_run", modal = True, show = False, no_move = True, no_resize = True, no_title_bar = True,
                     width = app_width / 4, height = app_height / 4, pos = [app_width * 0.635, app_height * 0.55]):

@@ -1,4 +1,5 @@
-import os, webbrowser, subprocess, random, time
+import decimal
+import os, webbrowser, subprocess, random, time, math
 import dearpygui.dearpygui as gui
 
 lora_tab_instances = 0
@@ -14,7 +15,18 @@ list_settings = ["input_ckpt_path", "checkbox_is_sd_768v_ckpt", "checkbox_is_sd_
                  "input_network_dim", "input_network_alpha", "checkbox_shuffle_caption", "combo_max_token_length",
                  "input_keep_tokens", "input_seed", "checkbox_grad_ckpt", "input_grad_accum_steps",
                  "input_max_data_loader_workers", "combo_save_precision", "combo_mixed_precision", "input_log_dir",
-                 "checkbox_custom_log_prefix", "input_custom_log_prefix", "input_custom_parameters"]
+                 "checkbox_custom_log_prefix", "input_custom_log_prefix", "input_custom_parameters",
+                 "checkbox_separate_lr"]
+
+
+def _help(message):
+    last_item = gui.last_item()
+    group = gui.add_group(horizontal = True)
+    gui.move_item(last_item, parent = group)
+    gui.capture_next_item(lambda s: gui.move_item(s, parent = group))
+    t = gui.add_text("(?)", color = [0, 255, 0])
+    with gui.tooltip(t):
+        gui.add_text(message)
 
 
 def path_button(tag, path_type, label):
@@ -56,7 +68,11 @@ def append_instance_number(tag_string):
 def get_caller_instance(caller_string):
     # наворотил хуйни
     # return re.split(r'^[a-zA-Z_]+', caller_string)[-1]
-    return caller_string.split("_")[-1]
+    return str(caller_string).split("_")[-1]
+
+
+def append_caller_instance(caller_instance):
+    return "_" + get_caller_instance(caller_instance)
 
 
 def lora_tab_name(caller):
@@ -85,6 +101,16 @@ def remove_trailing_slashes(path):
     return path.rstrip('\\/')
 
 
+def separate_lr(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("checkbox_separate_lr" + suffix):
+        gui.show_item("group_custom_lr" + suffix)
+        gui.hide_item("group_main_lr" + suffix)
+    if not gui.get_value("checkbox_separate_lr" + suffix):
+        gui.show_item("group_main_lr" + suffix)
+        gui.hide_item("group_custom_lr" + suffix)
+
+
 def combo_loras():
     active_tab = get_active_tab()
     lora_tab_name_list = []
@@ -99,10 +125,6 @@ def combo_loras():
     # print(gui.get_item_user_data("combo_lora_list"))
     gui.configure_item("combo_lora_list", items = lora_tab_name_list)
     # print(gui.get_item_configuration("combo_lora_list")["items"])
-
-
-def append_caller_instance(caller_instance):
-    return "_" + get_caller_instance(caller_instance)
 
 
 def show_fonts():
@@ -241,7 +263,7 @@ def train_steps(caller, request):
             if request == "value":
                 return int(max_train_steps)
             if request == "arg":
-                return f" --max_train_epochs={ int(max_train_steps) }"
+                return f" --max_train_epochs={gui.get_value('input_epochs_number' + suffix)}"
     elif gui.get_value("radio_training_duration_method" + suffix) == "Обучать в течении времени":
         training_speed = float(gui.get_value("input_training_speed" + suffix))
         if gui.get_value("combo_training_speed_type" + suffix) == "s/it":
@@ -254,13 +276,13 @@ def train_steps(caller, request):
         if request == "value":
             return int(max_train_steps)
         if request == "arg":
-            return f" --max_train_steps={ int(max_train_steps) }"
+            return f" --max_train_steps={int(max_train_steps)}"
     else:
         max_train_steps = gui.get_value('input_custom_steps' + suffix)
         if request == "value":
             return max_train_steps
         if request == "arg":
-            return f" --max_train_steps={ int(max_train_steps) }"
+            return f" --max_train_steps={int(max_train_steps)}"
 
 
 def RUN():
@@ -290,17 +312,24 @@ def RUN():
                     f" --output_name=\"{gui.get_value('input_output_name' + suffix)}\"" \
                     f" --save_every_n_epochs={gui.get_value('input_save_every_n_epochs' + suffix)}" \
                     f" --save_last_n_epochs={gui.get_value('input_save_last_n_epochs' + suffix)}" \
-                    f" --learning_rate={round(gui.get_value('input_learning_rate' + suffix), 8)}" \
-                    f" --unet_lr={round(gui.get_value('input_unet_learning_rate' + suffix), 8)}" \
-                    f" --text_encoder_lr={round(gui.get_value('input_TE_learning_rate' + suffix), 8)}" \
                     f" --lr_scheduler={gui.get_value('combo_scheduler' + suffix)}" \
-                    f" --resolution={gui.get_value('input_resolution' + suffix)}" \
+                    f" --resolution=\"{gui.get_value('input_resolution' + suffix)}\"" \
                     f" --network_dim={gui.get_value('input_network_dim' + suffix)}" \
                     f" --keep_tokens={gui.get_value('input_keep_tokens' + suffix)}" \
                     f" --gradient_accumulation_steps={gui.get_value('input_grad_accum_steps' + suffix)}" \
                     f" --max_data_loader_n_workers={gui.get_value('input_max_data_loader_workers' + suffix)}" \
                     f" --save_precision={gui.get_value('combo_save_precision' + suffix)}" \
                     f" --mixed_precision={gui.get_value('combo_mixed_precision' + suffix)}"
+                    # f" --learning_rate={round(gui.get_value('input_learning_rate' + suffix), 8)}" \
+                    # f" --unet_lr={round(gui.get_value('input_unet_learning_rate' + suffix), 8)}" \
+                    # f" --text_encoder_lr={round(gui.get_value('input_TE_learning_rate' + suffix), 8)}"
+
+        if gui.get_value("checkbox_separate_lr" + suffix):
+            commands += f" --unet_lr={decimal.Decimal(gui.get_value('input_unet_learning_rate' + suffix))}"
+            commands += f" --text_encoder_lr={decimal.Decimal(gui.get_value('input_TE_learning_rate' + suffix))}"
+        else:
+            commands += f" --learning_rate={decimal.Decimal(gui.get_value('input_learning_rate' + suffix))}"
+
 
         if gui.get_value("checkbox_is_sd_2.x_ckpt" + suffix):
             commands += " --v2"
@@ -314,36 +343,19 @@ def RUN():
             commands += f" --vae=\"{remove_trailing_slashes(gui.get_value('input_vae_path' + suffix))}\""
 
         max_train_steps = train_steps(suffix, "value")
-
         commands += train_steps(suffix, "arg")
 
-        '''if gui.get_value("radio_training_duration_method" + suffix) == "Использовать эпохи":
-            max_train_epochs = int(gui.get_value('input_epochs_number' + suffix))
-            if gui.get_value("checkbox_is_use_reg_images" + suffix):
-                max_train_steps *= 2
-            max_train_steps = calculate_total_images(suffix) / \
-                              int(gui.get_value("input_train_batch_size" + suffix)) * max_train_epochs
-            commands += f" --max_train_epochs={max_train_epochs}"
-        elif gui.get_value("radio_training_duration_method" + suffix) == "Обучать в течении времени":
-            training_speed = gui.get_value("input_training_speed" + suffix)
-            if gui.get_value("combo_training_speed_type" + suffix) == "s/it":
-                training_speed = 1 / training_speed
-                max_train_steps = training_speed * 60 * gui.get_value("input_training_time" + suffix)
-                # if gui.get_value("checkbox_is_use_reg_images" + suffix) == True:
-                # max_train_steps *= 2
-            commands += f" --max_train_steps={max_train_steps}"
-        else:
-            max_train_steps = gui.get_value('input_custom_steps' + suffix)
-            commands += f" --max_train_steps={max_train_steps}"'''
-
         if not gui.get_value('combo_scheduler' + suffix) == "constant":
-            commands += f" --lr_warmup_steps=" \
-                        f"{int(gui.get_value('slider_float_lr_warmup_ratio' + suffix) / 100 * int(max_train_steps))}"
+            try:
+                commands += f" --lr_warmup_steps=" \
+                            f"{int((gui.get_value('slider_float_lr_warmup_ratio' + suffix) / 100) * int(max_train_steps))}"
+            except ValueError:
+                pass
 
         if not gui.get_value('slider_int_clip_skip' + suffix) == "1":
             commands += f" --clip_skip={gui.get_value('slider_int_clip_skip' + suffix)}"
 
-        if not gui.get_value('input_network_alpha' + suffix) == "1":
+        if gui.get_value('input_network_alpha' + suffix) is not None:
             commands += f" --network_alpha={gui.get_value('input_network_alpha' + suffix)}"
 
         if gui.get_value('checkbox_shuffle_caption' + suffix):
@@ -361,28 +373,26 @@ def RUN():
             commands += " --gradient_checkpointing"
 
         if not gui.get_value('input_log_dir' + suffix) == "":
-            commands += f" --logging_dir={gui.get_value('input_log_dir' + suffix)}"
-            log_prefix = gui.get_value('input_output_name' + suffix)
+            commands += f" --logging_dir=\"{gui.get_value('input_log_dir' + suffix)}\""
+            log_prefix = gui.get_value('input_output_name' + suffix) + "_"
             if gui.get_value('checkbox_custom_log_prefix' + suffix):
                 log_prefix = gui.get_value('input_custom_log_prefix' + suffix)
-            commands += f" --log_prefix={log_prefix}"
+            commands += f" --log_prefix=\"{log_prefix}\""
 
         commands += f" {gui.get_value('input_custom_parameters' + suffix)}\n"
-
-        proc = subprocess.Popen("powershell", stdout = subprocess.PIPE, stderr = subprocess.PIPE,
-                                stdin = subprocess.PIPE)
-        console_output = proc.communicate(input = commands.encode())
-        for output in console_output:
-            print(output.decode(errors = 'replace', encoding = 'utf-8'))
-
-        # proc.communicate()[0].decode(errors = 'replace', encoding = sys.stdout.encoding)
-
-        # for output in proc.communicate():
-        # print(output.decode(errors = 'replace', encoding = chardet.detect(output)['encoding']))
-
-        # print("Return code: ", proc.returncode)
+        proc = subprocess.Popen("powershell", stdin = subprocess.PIPE).communicate(input = commands.encode())
+        # proc
 
     gui.hide_item("modal_training")
+
+
+def calculate_scheduler_plot_data():
+    sindatax = []; sindatay = []
+    scheduler = gui.get_value("combo_scheduler")
+    if scheduler == "linear":
+        sindatax.append([0, gui.get_value("slider_float_lr_warmup_ratio") / 100, 1])
+        sindatay.append([0, 1, 0])
+    gui.get_item_configuration("plot_line_series")
 
 
 tab_number = 0
@@ -402,6 +412,8 @@ def add_lora_tab():
                                      tag = append_instance_number("visibility_handler_reg_images"))
         gui.add_item_visible_handler(callback = custom_log_prefix,
                                      tag = append_instance_number("visibility_handler_custom_log_prefix"))
+        gui.add_item_visible_handler(callback = separate_lr,
+                                     tag = append_instance_number("visibility_handler_separate_lr"))
 
     with gui.item_handler_registry(tag = append_instance_number("handler_radio")):
         gui.add_item_visible_handler(callback = training_duration_method,
@@ -470,13 +482,13 @@ def add_lora_tab():
                 with gui.group(horizontal = True):
                     path_button(tag = append_instance_number("button_output_path"),
                                 path_type = "folder",
-                                label = "Папка сохранения сети")
+                                label = "Папка сохранения файла")
                     gui.add_input_text(tag = append_instance_number("input_output_path"), hint = "X:\LoRA",
                                        width = -1)
 
                 # output name
                 with gui.group(horizontal = True):
-                    gui.add_text("Название файла")
+                    gui.add_text("Имя файла")
                     gui.add_input_text(tag = append_instance_number("input_output_name"), hint = "my_LoRA_network",
                                        width = -1, callback = lora_tab_name,
                                        default_value = gui.get_item_label(append_instance_number("tab_lora")))
@@ -503,60 +515,68 @@ def add_lora_tab():
                 with gui.group():
                     with gui.group(tag = append_instance_number("group_epochs_number"), horizontal = True, show = True):
                         gui.add_text("Количество эпох")
-                        gui.add_input_int(tag = append_instance_number("input_epochs_number"), default_value = 10,
-                                          width = -1)
+                        gui.add_input_text(tag = append_instance_number("input_epochs_number"), default_value = '10',
+                                           width = -1, decimal = True)
                     with gui.group(tag = append_instance_number("group_training_time"), show = False):
                         with gui.group(horizontal = True):
                             gui.add_text("Время обучения")
                             gui.add_time_picker(hour24 = True, default_value = { 'hour': 0, 'min': 60, 'sec': 0 },
                                                 tag = append_instance_number("time_picker"))
-                            '''gui.add_input_int(tag = append_instance_number("input_training_time"),
-                                              default_value = 30, width = -1)'''
+
                         with gui.group(horizontal = True):
                             gui.add_text("Скорость обучения")
-                            gui.add_input_float(tag = append_instance_number("input_training_speed"),
-                                                default_value = 1.00, width = 120)
+                            gui.add_input_text(tag = append_instance_number("input_training_speed"),
+                                               default_value = '1.00', width = 120, decimal = True)
                             gui.add_combo(tag = append_instance_number("combo_training_speed_type"),
                                           items = ["it/s", "s/it"], width = -1, default_value = "it/s")
                     with gui.group(tag = append_instance_number("group_custom_steps"), horizontal = True, show = False):
                         gui.add_text("Количество шагов")
-                        gui.add_input_int(tag = append_instance_number("input_custom_steps"), default_value = 1000,
-                                          width = -1)
+                        gui.add_input_text(tag = append_instance_number("input_custom_steps"), default_value = '1000',
+                                           width = -1)
 
                 gui.add_separator()
 
                 with gui.group(horizontal = True):
                     gui.add_text("Размер обучающей партии")
-                    gui.add_input_int(tag = append_instance_number("input_train_batch_size"), default_value = 1,
-                                      width = -1)
+                    gui.add_input_text(tag = append_instance_number("input_train_batch_size"), default_value = '1',
+                                       width = -1, decimal = True)
 
                 with gui.group(horizontal = True):
                     gui.add_text("Сохранять чекпоинт каждые")
-                    gui.add_input_int(tag = append_instance_number("input_save_every_n_epochs"), default_value = 1,
-                                      width = 100)
+                    gui.add_input_text(tag = append_instance_number("input_save_every_n_epochs"), default_value = '1',
+                                       width = 100, decimal = True)
                     gui.add_text("эпох")
                 with gui.group(horizontal = True):
                     gui.add_text("Сохранять только последние")
-                    gui.add_input_int(tag = append_instance_number("input_save_last_n_epochs"), default_value = 1,
-                                      width = 100)
+                    gui.add_input_text(tag = append_instance_number("input_save_last_n_epochs"), default_value = '1',
+                                       width = 100, decimal = True)
                     gui.add_text("эпох")
 
             with gui.tab(label = "Настройки"):
                 with gui.collapsing_header(label = "Обучение"):
                     with gui.group(horizontal = True):
+                        gui.add_text("Использовать раздельные скорости обучения")
+                        gui.add_checkbox(tag = append_instance_number("checkbox_separate_lr"), default_value = False)
+
+                    gui.bind_item_handler_registry(append_instance_number("checkbox_separate_lr"),
+                                                   append_instance_number("handler_checkbox"))
+
+                    with gui.group(horizontal = True, tag = append_instance_number("group_main_lr")):
                         gui.add_text("Скорость обучения")
-                        gui.add_input_float(tag = append_instance_number("input_learning_rate"),
-                                            default_value = 1e-3, width = -1)
+                        gui.add_input_text(tag = append_instance_number("input_learning_rate"),
+                                           default_value = '1e-3', width = -1, scientific = True)
 
-                    with gui.group(horizontal = True):
-                        gui.add_text("Скорость обучения UNet")
-                        gui.add_input_float(tag = append_instance_number("input_unet_learning_rate"),
-                                            default_value = 1e-3, width = -1)
+                    with gui.group(tag = append_instance_number("group_custom_lr"), show = False):
+                        with gui.group(horizontal = True):
+                            gui.add_text("Скорость обучения UNet")
+                            gui.add_input_text(tag = append_instance_number("input_unet_learning_rate"),
+                                               default_value = '1e-3', width = -1, scientific = True)
 
-                    with gui.group(horizontal = True):
-                        gui.add_text("Скорость обучения TE")
-                        gui.add_input_float(tag = append_instance_number("input_TE_learning_rate"),
-                                            default_value = 1e-3, width = -1)
+                        with gui.group(horizontal = True):
+                            gui.add_text("Скорость обучения TE")
+                            _help("ТЕ - текстовый энкодер")
+                            gui.add_input_text(tag = append_instance_number("input_TE_learning_rate"),
+                                               default_value = '1e-3', width = -1, scientific = True)
 
                     with gui.group(horizontal = True):
                         gui.add_text("Планировщик")
@@ -570,52 +590,77 @@ def add_lora_tab():
 
                     with gui.group(tag = append_instance_number("group_warmup_ratio"), horizontal = True, show = True):
                         gui.add_text("Разогрев планировщика")
+                        _help("Количество шагов в начале обучения,\n"
+                              "в течении которых скорость обучения\n"
+                              "будет линейно возрастать до значения\n"
+                              "указанного выше.")
                         gui.add_slider_float(tag = append_instance_number("slider_float_lr_warmup_ratio"), width = -1,
                                              min_value = 0.0, max_value = 100.0, format = '%.0f%%', default_value = 0.0,
                                              clamped = True)
-                    gui.add_separator()
+
+                    '''with gui.child_window(height = 800, border = False):
+                        with gui.plot(label = "Планировщик", width = -1, height = 400, no_menus = True,
+                                      no_highlight = True,
+                                      no_mouse_pos = True, no_box_select = True, anti_aliased = True):
+                            gui.add_plot_axis(gui.mvXAxis, label = "Шаги обучения (%)")
+                            with gui.plot_axis(gui.mvYAxis, label = "Скорость обучения"):
+                                gui.add_line_series([1], [1], tag = "plot_line_series")'''
+
+                    # gui.add_separator()
 
                 with gui.collapsing_header(label = "Основные настройки"):
                     with gui.group(horizontal = True):
-                        gui.add_text("Разрешение")
-                        gui.add_input_int(tag = append_instance_number("input_resolution"),
-                                          default_value = 512, width = -1)
+                        gui.add_text("Разрешение обучения")
+                        gui.add_input_text(tag = append_instance_number("input_resolution"),
+                                           default_value = "512,512", width = -1, decimal = True)
 
                     with gui.group(horizontal = True):
                         gui.add_text("CLIP Skip")
+                        _help("Использовать вывод текстового\n"
+                              "энкодера с конца N-ного слоя.\n"
+                              "1 для SD-основаных чекпоинтов,\n"
+                              "2 для NAI-основанных чекпоинтов.\n"
+                              "С помощью Ctrl+ЛКМ можно ввести\n"
+                              "своё значение.")
                         gui.add_slider_int(tag = append_instance_number("slider_int_clip_skip"),
                                            default_value = 1, width = 50, min_value = 1, max_value = 2)
 
                     with gui.group(horizontal = True):
                         gui.add_text("Размер (ранк) сети")
-                        gui.add_input_int(tag = append_instance_number("input_network_dim"),
-                                          default_value = 128, width = -1)
+                        gui.add_input_text(tag = append_instance_number("input_network_dim"),
+                                           default_value = '128', width = -1, decimal = True)
 
                     with gui.group(horizontal = True):
                         gui.add_text("Альфа сети")
-                        gui.add_input_int(tag = append_instance_number("input_network_alpha"),
-                                          default_value = 1, width = -1)
+                        _help("Добавлено в версии sd-scripts 0.4.0.\n"
+                              "Если у вас старая версия, поставьте 0.")
+                        gui.add_input_text(tag = append_instance_number("input_network_alpha"),
+                                           default_value = '1', width = -1, decimal = True)
 
                     with gui.group(horizontal = True):
                         gui.add_text("Перемешивание описаний")
+                        _help("Теги, написанные через запятую в файлах описания\n"
+                              "будут перемешиваться. Делает обучение текстового\n"
+                              "энкодера более гибким.")
                         gui.add_checkbox(tag = append_instance_number("checkbox_shuffle_caption"), default_value = True)
 
                     with gui.group(horizontal = True):
                         gui.add_text("Макс. длина токена")
-                        gui.add_combo(["75", "150", "225"], tag = append_instance_number("combo_max_token_length"),
-                                      default_value = "75", width = -1)
+                        gui.add_combo(['75', '150', '225'], tag = append_instance_number("combo_max_token_length"),
+                                      default_value = '225', width = -1)
 
                     with gui.group(horizontal = True):
                         gui.add_text("Защитить от перемешивания первые")
-                        gui.add_input_int(tag = append_instance_number("input_keep_tokens"),
-                                          default_value = 1, width = 120)
+                        gui.add_input_text(tag = append_instance_number("input_keep_tokens"),
+                                           default_value = '1', width = 120, decimal = True)
                         gui.add_text("токенов")
 
                     with gui.group(horizontal = True):
                         gui.add_text("Сид")
-                        gui.add_input_int(tag = append_instance_number("input_seed"),
-                                          default_value = -1, width = -1)
-                    gui.add_separator()
+                        _help("-1 = рандомный сид")
+                        gui.add_input_text(tag = append_instance_number("input_seed"),
+                                           default_value = '-1', width = -1, decimal = True)
+                    # gui.add_separator()
 
             with gui.tab(label = "Дополнительно"):
                 with gui.group(horizontal = True):
@@ -631,13 +676,17 @@ def add_lora_tab():
 
                 with gui.group(horizontal = True):
                     gui.add_text("gradient_accumulation_steps")
-                    gui.add_input_int(tag = append_instance_number("input_grad_accum_steps"),
-                                      default_value = 1, width = -1)
+                    gui.add_input_text(tag = append_instance_number("input_grad_accum_steps"),
+                                       default_value = '1', width = -1, decimal = True)
 
                 with gui.group(horizontal = True):
                     gui.add_text("max_data_loader_n_workers")
-                    gui.add_input_int(tag = append_instance_number("input_max_data_loader_workers"),
-                                      default_value = 8, width = -1)
+                    _help("Выделяемое количество потоков\n"
+                          "процессора для DataLoader. Маленькие\n"
+                          "значения могут негативно сказаться\n"
+                          "скорости обучения.")
+                    gui.add_input_text(tag = append_instance_number("input_max_data_loader_workers"),
+                                       default_value = '8', width = -1, decimal = True)
 
                 with gui.group(horizontal = True):
                     gui.add_text("save_precision")
