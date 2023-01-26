@@ -1,10 +1,98 @@
-import webbrowser
+import chardet
+import sys, os, webbrowser, subprocess, random, io
+import dearpygui.dearpygui as gui
 
-import dearpygui.dearpygui as dpg
+lora_tab_instances = 0
+
+
+def path_button(tag, path_type, label):
+    if path_type == "folder":
+        callback = path_dialog_show
+    if path_type == "file":
+        callback = file_dialog_show
+    return gui.add_button(tag = tag, label = label, callback = callback)
+
+
+def calculate_total_images(caller):
+    suffix = append_caller_instance(caller)
+    main_image_folder = gui.get_value("input_img_path" + suffix)
+    image_dirs = os.listdir(main_image_folder)
+    total_images = 0
+    for dir in image_dirs:
+        parts = dir.split('_', 1)
+        repeats = int(parts[0])
+        images_count = 0
+        for training_file in os.listdir(main_image_folder + "\\" + dir):
+            if training_file.split('.')[-1] == "jpg" or training_file.split('.')[-1] == \
+                "jpeg" or training_file.split('.')[-1] == "png" or training_file.split('.')[-1] == "webp" or \
+                    training_file.split('.')[-1] == "bmp":
+                images_count += 1
+        total_images += repeats * images_count
+    return total_images
+
+def append_instance_number(tag_string):
+    return tag_string + "_" + str(lora_tab_instances)
+
+
+def get_caller_instance(caller_string):
+    # наворотил хуйни
+    # return re.split(r'^[a-zA-Z_]+', caller_string)[-1]
+    return caller_string.split("_")[-1]
+
+
+def lora_tab_name(caller):
+    suffix = append_caller_instance(caller)
+    gui.set_item_label("tab_lora" + suffix, gui.get_value("input_output_name" + suffix))
+    if gui.get_item_label("tab_lora" + suffix) == "":
+        gui.set_item_label("tab_lora" + suffix, "Tab " + get_caller_instance(caller))
+
+
+def calculate_lora_tab_count():
+    i = 0
+    lora_tab_name_list = []
+    lora_tab_instance_list = []
+    for lora_tab in gui.get_item_children("tab_bar_main_panel", 1):
+        if not gui.is_item_shown(lora_tab) and gui.get_item_info(lora_tab)["container"]:
+            gui.delete_item(lora_tab)
+        elif not gui.get_item_info(lora_tab)["container"]:
+            pass
+        else:
+            i += 1
+
+    gui.configure_item("combo_lora_list", items = lora_tab_name_list)
+    return i
+
+
+def remove_trailing_slashes(path):
+    return path.rstrip('\\/')
+
+
+def combo_loras():
+    i = 0
+    lora_tab_name_list = []
+    lora_tab_instance_list = []
+    for lora_tab in gui.get_item_children("tab_bar_main_panel", 1):
+        i += 1
+        if gui.is_item_shown(lora_tab) and gui.get_item_info(lora_tab)["container"]:
+            if not ("tab_lora_" + str(i)) == ("tab_lora" + get_active_tab_instance()):
+                lora_tab_name_list.append(gui.get_item_label(lora_tab))
+                lora_tab_instance_list.append("_" + str(i))
+    gui.set_item_user_data("combo_lora_list", lora_tab_instance_list)
+    print(gui.get_item_user_data("combo_lora_list"))
+    gui.configure_item("combo_lora_list", items = lora_tab_name_list)
+    print(gui.get_item_configuration("combo_lora_list")["items"])
+
+
+def append_caller_instance(caller_instance):
+    return "_" + get_caller_instance(caller_instance)
+
+
+def toggle_console():
+    pass
 
 
 def show_fonts():
-    dpg.show_font_manager()
+    gui.show_font_manager()
 
 
 def show_info():
@@ -15,50 +103,499 @@ def open_link_guide():
     webbrowser.open_new_tab("https://rentry.org/2chAI_LoRA_Dreambooth_guide")
 
 
-def open_link_technothread():
-    webbrowser.open_new_tab("https://rentry.org/2chAI_LoRA_Dreambooth_guide")
-
-
 def path_dialog_show(sender):
     item = "path_dialog"
     send_to = sender.replace("button_", "input_", 1)
-    dpg.show_item(item)
-    dpg.set_item_user_data(item, send_to)
+    gui.show_item(item)
+    gui.set_item_user_data(item, send_to)
 
 
 def file_dialog_show(sender):
     item = "file_dialog"
     send_to = sender.replace("button_", "input_", 1)
-    dpg.show_item(item)
-    dpg.set_item_user_data(item, send_to)
+    gui.show_item(item)
+    gui.set_item_user_data(item, send_to)
 
 
 def file_dialog_ok(sender, app_data, user_data):
     print("Sending ", app_data["file_path_name"], " to ", user_data)
-    dpg.set_value(user_data, app_data["file_path_name"])
-
+    gui.set_value(user_data, app_data["file_path_name"])
 
 
 def file_dialog_cancel():
     pass
 
-def sd_2x():
-    if not dpg.is_item_shown("is_sd_768v_ckpt"):
-        dpg.show_item("is_sd_768v_ckpt")
+
+def sd_2x(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("checkbox_is_sd_2.x_ckpt" + suffix) == True:
+        gui.show_item("checkbox_is_sd_768v_ckpt" + suffix)
     else:
-        dpg.hide_item("is_sd_768v_ckpt")
+        gui.set_value("checkbox_is_sd_768v_ckpt" + suffix, False)
+        gui.hide_item("checkbox_is_sd_768v_ckpt" + suffix)
 
 
-def reg_images():
-    if not dpg.is_item_shown("group_reg_images"):
-        dpg.show_item("group_reg_images")
+def reg_images(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("checkbox_is_use_reg_images" + suffix) == True:
+        gui.show_item("group_reg_images" + suffix)
     else:
-        dpg.hide_item("group_reg_images")
-        dpg.set_value("input_reg_img_path", "")
+        gui.hide_item("group_reg_images" + suffix)
+        gui.set_value("input_reg_img_path" + suffix, "")
 
-def use_vae():
-    if not dpg.is_item_shown("group_vae_path"):
-        dpg.show_item("group_vae_path")
+
+def use_vae(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("checkbox_is_use_vae" + suffix) == True:
+        gui.show_item("group_vae_path" + suffix)
     else:
-        dpg.hide_item("group_vae_path")
-        dpg.set_value("input_vae_path", "")
+        gui.hide_item("group_vae_path" + suffix)
+        gui.set_value("input_vae_path" + suffix, "")
+
+
+def custom_log_prefix(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("checkbox_custom_log_prefix" + suffix) == True:
+        gui.show_item("group_custom_log_prefix" + suffix)
+    else:
+        gui.hide_item("group_custom_log_prefix" + suffix)
+        gui.set_value("input_custom_log_prefix" + suffix, "")
+
+
+def scheduler(caller):
+    suffix = append_caller_instance(caller)
+    if not gui.get_value("combo_scheduler" + suffix) == "constant":
+        gui.show_item("group_warmup_ratio" + suffix)
+    else:
+        gui.hide_item("group_warmup_ratio" + suffix)
+
+
+
+def training_duration_method(caller):
+    suffix = append_caller_instance(caller)
+    methods = { "Использовать эпохи": "group_epochs_number" + suffix,
+                "Обучать в течении времени": "group_training_time" + suffix,
+                "Своё количество шагов": "group_custom_steps" + suffix }
+    gui.show_item(methods.get(gui.get_value("radio_training_duration_method" + suffix)))
+    del methods[gui.get_value("radio_training_duration_method" + suffix)]
+    for method in methods:
+        gui.hide_item(methods.get(method))
+
+
+def copy_settings_to_another_tab(user_data):
+    list_settings = ["input_sdscripts_path", "input_ckpt_path", "checkbox_is_sd_768v_ckpt", "checkbox_is_sd_2.x_ckpt",
+                     "checkbox_is_use_vae", "input_vae_path", "input_img_path", "checkbox_is_use_reg_images", "input_reg_img_path",
+                     "input_output_path", "input_output_name", "radio_training_duration_method", "input_epochs_number",
+                     "input_training_time", "input_training_speed", "combo_training_speed_type", "input_custom_steps",
+                     "input_save_every_n_epochs", "input_save_last_n_epochs",
+                     "input_learning_rate", "input_unet_learning_rate", "input_TE_learning_rate", "input_learning_rate",
+                     "combo_scheduler", "slider_float_lr_warmup_ratio", "input_resolution", "slider_int_clip_skip",
+                     "input_network_dim", "input_network_alpha", "checkbox_shuffle_caption", "combo_max_token_length",
+                     "input_keep_tokens", "input_seed", "checkbox_grad_ckpt", "input_grad_accum_steps",
+                     "input_max_data_loader_workers", "combo_save_precision", "combo_mixed_precision", "input_log_dir",
+                     "checkbox_custom_log_prefix", "input_custom_log_prefix", "input_custom_parameters"]
+    i = 0
+    for lora in gui.get_item_configuration("combo_lora_list")["items"]:
+        if gui.get_value("combo_lora_list") == lora:
+            send_to_suffix = gui.get_item_user_data("combo_lora_list")[i]
+        i += 1
+    print("sending setting from: ", "tab_lora" + get_active_tab_instance())
+    print("sending setting to: ", "tab_lora" + send_to_suffix)
+    for setting in list_settings:
+        gui.set_value(setting + send_to_suffix, gui.get_value(setting + get_active_tab_instance()))
+
+
+def get_active_tab_instance():
+    for lora_tab_bar in range(1, lora_tab_instances + 1):
+        if gui.is_item_visible("tab_bar_lora" + "_" + str(lora_tab_bar)):
+            return "_" + str(lora_tab_bar)
+
+
+def RUN():
+    pwsh = "powershell"
+    for i in range(1, calculate_lora_tab_count() + 1):
+        commands = ""
+        suffix = "_" + str(i)
+
+        proc = subprocess.Popen(pwsh, stdout = subprocess.PIPE, stderr = subprocess.PIPE,
+                                stdin = subprocess.PIPE, env = { 'PYTHONIOENCODING': 'utf-8' })
+
+        commands = "[console]::OutputEncoding = [text.encoding]::UTF8\n"
+        # блять jfs ебать ты чед
+        # commands += "$env:PYTHONIOENCODING = 'utf-8'\n"
+        commands += f"Set-Location \"{ gui.get_value('input_sdscripts_path' + suffix) }\"\n"
+        commands += ".\\venv\Scripts\\activate\n"
+
+        # \"{ gui.get_value('' + suffix) }\"
+        commands += f"accelerate launch --num_cpu_threads_per_process { gui.get_value('input_max_data_loader_workers'  + suffix) }" \
+                   f" train_network.py --network_module=networks.lora" \
+                   f" --pretrained_model_name_or_path=\"{ remove_trailing_slashes(gui.get_value('input_ckpt_path' + suffix)) }\"" \
+                   f" --train_data_dir=\"{ remove_trailing_slashes(gui.get_value('input_img_path' + suffix)) }\"" \
+                   f" --output_dir=\"{ remove_trailing_slashes(gui.get_value('input_output_path' + suffix)) }\"" \
+                   f" --output_name=\"{ gui.get_value('input_output_name' + suffix) }\"" \
+                   f" --save_every_n_epochs={ gui.get_value('input_save_every_n_epochs' + suffix) }" \
+                   f" --save_last_n_epochs={ gui.get_value('input_save_last_n_epochs' + suffix) }" \
+                   f" --learning_rate={ gui.get_value('input_learning_rate' + suffix) }" \
+                   f" --unet_lr={ gui.get_value('input_unet_learning_rate' + suffix) }" \
+                   f" --text_encoder_lr={ gui.get_value('input_TE_learning_rate' + suffix) }" \
+                   f" --lr_scheduler={ gui.get_value('combo_scheduler' + suffix) }" \
+                   f" --resolution={ gui.get_value('input_resolution' + suffix) }" \
+                   f" --network_dim={ gui.get_value('input_network_dim' + suffix) }" \
+                   f" --keep_tokens={ gui.get_value('input_keep_tokens' + suffix) }" \
+                   f" --gradient_accumulation_steps={ gui.get_value('input_grad_accum_steps' + suffix) }" \
+                   f" --max_data_loader_n_workers={ gui.get_value('input_max_data_loader_workers' + suffix) }" \
+                   f" --save_precision={ gui.get_value('combo_save_precision' + suffix) }" \
+                   f" --mixed_precision={ gui.get_value('combo_mixed_precision' + suffix) }"
+
+        if gui.get_value("checkbox_is_sd_2.x_ckpt" + suffix) == True:
+            commands += " --v2"
+            if gui.get_value("checkbox_is_sd_768v_ckpt" + suffix) == True:
+                commands += " --v_parameterization"
+
+        if gui.get_value("checkbox_is_use_reg_images" + suffix) == True:
+            commands += f" --reg_data_dir=\"{ remove_trailing_slashes(gui.get_value('input_reg_img_path' + suffix)) }\""
+
+        if gui.get_value("checkbox_is_use_vae" + suffix) == True:
+            commands += f" --vae=\"{ remove_trailing_slashes(gui.get_value('input_vae_path' + suffix)) }\""
+
+        max_train_steps = 0
+
+        if gui.get_value("radio_training_duration_method" + suffix) == "Использовать эпохи":
+            max_train_epochs = int(gui.get_value('input_epochs_number' + suffix))
+            if gui.get_value("checkbox_is_use_reg_images" + suffix) == True:
+                max_train_steps *= 2
+            max_train_steps = calculate_total_images(suffix) / \
+                              int(gui.get_value("input_train_batch_size" + suffix)) * max_train_epochs
+            commands += f" --max_train_epochs={ max_train_epochs }"
+        elif gui.get_value("radio_training_duration_method" + suffix) == "Обучать в течении времени":
+            training_speed = gui.get_value("input_training_speed" + suffix)
+            if gui.get_value("combo_training_speed_type" + suffix) == "s/it":
+                training_speed = 1 / training_speed
+                max_train_steps =  training_speed * 60 * gui.get_value("input_training_time" + suffix)
+                # if gui.get_value("checkbox_is_use_reg_images" + suffix) == True:
+                    # max_train_steps *= 2
+            commands += f" --max_train_steps={ max_train_steps }"
+        else:
+            max_train_steps = gui.get_value('input_custom_steps' + suffix)
+            commands += f" --max_train_steps={ max_train_steps }"
+
+        if not gui.get_value('combo_scheduler' + suffix) == "constant":
+            commands += f" --lr_warmup_steps=" \
+                        f"{ int(gui.get_value('slider_float_lr_warmup_ratio' + suffix) / 100 * int(max_train_steps)) }"
+
+        if not gui.get_value('slider_int_clip_skip' + suffix) == "1":
+            commands += f" --clip_skip={ gui.get_value('slider_int_clip_skip' + suffix) }"
+
+        if not gui.get_value('input_network_alpha' + suffix) == "1":
+            commands += f" --network_alpha={ gui.get_value('input_network_alpha' + suffix) }"
+
+        if gui.get_value('checkbox_shuffle_caption' + suffix) == True:
+            commands += " --shuffle_caption"
+
+        if not gui.get_value('combo_max_token_length' + suffix) == "75":
+            commands += f" --max_token_length={ gui.get_value('combo_max_token_length' + suffix) }"
+
+        seed = gui.get_value('input_seed' + suffix)
+        if gui.get_value('input_seed' + suffix) == "-1":
+            seed = random.randint(1, 2147483647)
+        commands += f" --seed={ seed }"
+
+        if gui.get_value('checkbox_grad_ckpt' + suffix) == True:
+            commands += " --gradient_checkpointing"
+
+        if not gui.get_value('input_log_dir' + suffix) == "":
+            commands += f" --logging_dir={ gui.get_value('input_log_dir' + suffix) }"
+            log_prefix = gui.get_value('input_output_name' + suffix)
+            if gui.get_value('checkbox_custom_log_prefix' + suffix) == True:
+                log_prefix = gui.get_value('input_custom_log_prefix' + suffix)
+            commands += f" --log_prefix={ log_prefix }"
+
+        commands += f" { gui.get_value('input_custom_parameters' + suffix) }\n"
+
+        proc.stdin.write(commands.encode())
+        proc.stdin.flush()
+
+        '''for output in proc.communicate():
+            print(output.decode(errors = 'replace', encoding = chardet.detect(output)['encoding']))'''
+
+        while True:
+            output = proc.stdout.readline()
+            if output == '' and proc.poll() is not None:
+                break
+            if output:
+                print(output.strip())
+
+        print("Return code: ", proc.returncode)
+
+def add_lora_tab():
+    global lora_tab_instances
+    lora_tab_instances += 1
+    tab_number = 0
+    tab_number += calculate_lora_tab_count() + 1
+
+    with gui.item_handler_registry(tag = append_instance_number("handler_checkbox")):
+        gui.add_item_visible_handler(callback = sd_2x, tag = append_instance_number("visibility_handler_sd_2x"))
+        gui.add_item_visible_handler(callback = use_vae, tag = append_instance_number("visibility_handler_use_vae"))
+        gui.add_item_visible_handler(callback = reg_images, tag = append_instance_number("visibility_handler_reg_images"))
+        gui.add_item_visible_handler(callback = custom_log_prefix, tag = append_instance_number("visibility_handler_custom_log_prefix"))
+
+    with gui.item_handler_registry(tag = append_instance_number("handler_radio")):
+        gui.add_item_visible_handler(callback = training_duration_method, tag = append_instance_number("visibility_handler_training_method"))
+
+    with gui.item_handler_registry(tag = append_instance_number("handler_combo")):
+        gui.add_item_visible_handler(callback = scheduler, tag = append_instance_number("visibility_handler_scheduler"))
+
+    with gui.tab(tag = append_instance_number("tab_lora"), before = "tab_button_add_lora_tab",
+                 label = "LoRA сеть #" + str(tab_number), closable = True):
+        calculate_lora_tab_count()
+        with gui.tab_bar(tag = append_instance_number("tab_bar_lora")):
+            with gui.tab(label = "Пути"):
+                # sd-scripts dir
+                with gui.group(horizontal = True):
+                    button_sdscripts_path = path_button(tag = append_instance_number("button_sdscripts_path"),
+                                                        path_type = "folder",
+                                                        label = "Путь к папке sd-scripts")
+                    gui.add_input_text(tag = append_instance_number("input_sdscripts_path"), hint = "X:\git\sd-scripts",
+                                       width = -1)
+
+                # ckpt
+                with gui.group(horizontal = True):
+                    button_ckpt_path = path_button(tag = append_instance_number("button_ckpt_path"), path_type = "file",
+                                                   label = "SD чекпоинт")
+                    gui.add_input_text(tag = append_instance_number("input_ckpt_path"),
+                                       hint = "X:\models\checkpoint.safetensors", width = -1)
+                # sd 2.x checkboxes
+                with gui.group(horizontal = True):
+                    gui.add_checkbox(tag = append_instance_number("checkbox_is_sd_768v_ckpt"), label = "768-v",
+                                     show = False)
+                    gui.add_checkbox(tag = append_instance_number("checkbox_is_sd_2.x_ckpt"),
+                                     label = "Stable Diffusion 2.x",
+                                     before = append_instance_number("checkbox_is_sd_768v_ckpt"))
+                    gui.bind_item_handler_registry(append_instance_number("checkbox_is_sd_2.x_ckpt"), append_instance_number("handler_checkbox"))
+
+                # vae checkbox
+                gui.add_checkbox(tag = append_instance_number("checkbox_is_use_vae"), label = "Использовать VAE",
+                                 callback = use_vae)
+
+                # vae
+                with gui.group(tag = append_instance_number("group_vae_path"), horizontal = True, show = False):
+                    button_vae_path = path_button(tag = append_instance_number("button_vae_path"), path_type = "file",
+                                                  label = "VAE чекпоинт")
+                    gui.add_input_text(tag = append_instance_number("input_vae_path"), hint = "X:\models\\vae.pt",
+                                       width = -1)
+                    gui.bind_item_handler_registry(append_instance_number("checkbox_is_use_vae"),
+                                                   append_instance_number("handler_checkbox"))
+
+                # images dir
+                with gui.group(horizontal = True):
+                    button_img_path = path_button(tag = append_instance_number("button_img_path"), path_type = "folder",
+                                                  label = "Папка с изображениями")
+                    gui.add_input_text(tag = append_instance_number("input_img_path"), hint = "X:\\training_data\img",
+                                       width = -1)
+
+                # use reg images
+                gui.add_checkbox(tag = append_instance_number("checkbox_is_use_reg_images"),
+                                 label = "Использовать рег. изображения",
+                                 callback = reg_images)
+                gui.bind_item_handler_registry(append_instance_number("checkbox_is_use_reg_images"),
+                                               append_instance_number("handler_checkbox"))
+
+                # reg images dir
+                with gui.group(tag = append_instance_number("group_reg_images"), horizontal = True, show = False):
+                    button_reg_img_path = path_button(tag = append_instance_number("button_reg_img_path"),
+                                                      path_type = "folder",
+                                                      label = "Папка с рег. изображениями")
+                    gui.add_input_text(tag = append_instance_number("input_reg_img_path"),
+                                       hint = "X:\\training_data\img", width = -1)
+
+                # output dir
+                with gui.group(horizontal = True):
+                    button_output_path = path_button(tag = append_instance_number("button_output_path"),
+                                                     path_type = "folder",
+                                                     label = "Папка сохранения сети")
+                    gui.add_input_text(tag = append_instance_number("input_output_path"), hint = "X:\LoRA",
+                                       width = -1)
+
+                # output name
+                with gui.group(horizontal = True):
+                    gui.add_text("Название файла")
+                    gui.add_input_text(tag = append_instance_number("input_output_name"), hint = "my_LoRA_network_v1",
+                                       width = -1, callback = lora_tab_name)
+
+            with gui.tab(label = "Длительность"):
+                gui.add_text("Метод расчёта шагов обучения")
+                gui.add_radio_button(tag = append_instance_number("radio_training_duration_method"),
+                                     items = ["Использовать эпохи", "Обучать в течении времени",
+                                              "Своё количество шагов"], default_value = "Использовать эпохи",
+                                     horizontal = True, callback = training_duration_method)
+                gui.bind_item_handler_registry(append_instance_number("radio_training_duration_method"),
+                                               append_instance_number("handler_radio"))
+
+                gui.add_separator()
+
+                with gui.group():
+                    with gui.group(tag = append_instance_number("group_epochs_number"), horizontal = True, show = True):
+                        gui.add_text("Количество эпох")
+                        gui.add_input_text(tag = append_instance_number("input_epochs_number"), default_value = "10",
+                                           width = -1)
+                    with gui.group(tag = append_instance_number("group_training_time"), show = False):
+                        with gui.group(horizontal = True):
+                            gui.add_text("Время обучения в минутах")
+                            gui.add_input_text(tag = append_instance_number("input_training_time"),
+                                               default_value = "30", width = -1)
+                        with gui.group(horizontal = True, tag = append_instance_number("group_")):
+                            gui.add_text("Скорость обучения")
+                            gui.add_input_text(tag = append_instance_number("input_training_speed"),
+                                               default_value = "1.23", width = 80)
+                            gui.add_combo(tag = append_instance_number("combo_training_speed_type"),
+                                          items = ["it/s", "s/it"], width = -1)
+                    with gui.group(tag = append_instance_number("group_custom_steps"), horizontal = True, show = False):
+                        gui.add_text("Количество шагов")
+                        gui.add_input_text(tag = append_instance_number("input_custom_steps"), default_value = "1000",
+                                           width = -1)
+
+                gui.add_separator()
+
+                with gui.group(horizontal = True):
+                    gui.add_text("Размер обучающей партии")
+                    gui.add_input_text(tag = append_instance_number("input_train_batch_size"), default_value = "1",
+                                       width = -1)
+
+                with gui.group(horizontal = True):
+                    gui.add_text("Сохранять чекпоинт каждые")
+                    gui.add_input_text(tag = append_instance_number("input_save_every_n_epochs"), default_value = "1",
+                                       width = -1)
+                    gui.add_text("эпох")
+                with gui.group(horizontal = True):
+                    gui.add_text("Сохранять только последние")
+                    gui.add_input_text(tag = append_instance_number("input_save_last_n_epochs"), default_value = "1",
+                                       width = -1)
+                    gui.add_text("эпох")
+
+            with gui.tab(label = "Настройки"):
+
+                with gui.collapsing_header(label = "Обучение"):
+                    with gui.group(horizontal = True):
+                        gui.add_text("Скорость обучения")
+                        gui.add_input_text(tag = append_instance_number("input_learning_rate"),
+                                           default_value = "1e-3", width = -1)
+
+                    with gui.group(horizontal = True):
+                        gui.add_text("Скорость обучения UNet")
+                        gui.add_input_text(tag = append_instance_number("input_unet_learning_rate"),
+                                           default_value = "1e-3", width = -1)
+
+                    with gui.group(horizontal = True):
+                        gui.add_text("Скорость обучения TE")
+                        gui.add_input_text(tag = append_instance_number("input_TE_learning_rate"),
+                                           default_value = "1e-3", width = -1)
+
+                    with gui.group(horizontal = True):
+                        gui.add_text("Планировщик")
+                        gui.add_combo(["linear", "cosine", "cosine_with_restarts", "polynomial",
+                                       "constant", "constant_with_warmup"],
+                                      tag = append_instance_number("combo_scheduler"),
+                                           default_value = "linear", width = -1, callback = scheduler)
+
+                    gui.bind_item_handler_registry(append_instance_number("combo_scheduler"),
+                                                   append_instance_number("handler_combo"))
+
+                    with gui.group(tag = append_instance_number("group_warmup_ratio"), horizontal = True, show = True):
+                        gui.add_text("Разогрев планировщика")
+                        gui.add_slider_float(tag = append_instance_number("slider_float_lr_warmup_ratio"), width = -1,
+                                             min_value = 0.0, max_value = 100.0, format = '%.0f%%', default_value = 0.0,
+                                             clamped = True)
+                    gui.add_separator()
+
+                with gui.collapsing_header(label = "Основные настройки"):
+                    with gui.group(horizontal = True):
+                        gui.add_text("Разрешение")
+                        gui.add_input_text(tag = append_instance_number("input_resolution"),
+                                           default_value = "512", width = -1)
+
+                    with gui.group(horizontal = True):
+                        gui.add_text("CLIP Skip")
+                        gui.add_slider_int(tag = append_instance_number("slider_int_clip_skip"),
+                                           default_value = 1, width = 50, min_value = 1, max_value = 2)
+
+                    with gui.group(horizontal = True):
+                        gui.add_text("Размер (ранк) сети")
+                        gui.add_input_text(tag = append_instance_number("input_network_dim"),
+                                           default_value = "128", width = -1)
+
+                    with gui.group(horizontal = True):
+                        gui.add_text("Альфа сети")
+                        gui.add_input_text(tag = append_instance_number("input_network_alpha"),
+                                           default_value = "1", width = -1)
+
+                    with gui.group(horizontal = True):
+                        gui.add_text("Перемешивание описаний")
+                        gui.add_checkbox(tag = append_instance_number("checkbox_shuffle_caption"), default_value = True)
+
+                    with gui.group(horizontal = True):
+                        gui.add_text("Макс. длина токена")
+                        gui.add_combo(["75", "150", "225"], tag = append_instance_number("combo_max_token_length"),
+                                           default_value = "75", width = -1)
+
+                    with gui.group(horizontal = True):
+                        gui.add_text("Защитить от перемешивания первые")
+                        gui.add_input_text(tag = append_instance_number("input_keep_tokens"),
+                                           default_value = "1", width = 50)
+                        gui.add_text("токенов")
+
+                    with gui.group(horizontal = True):
+                        gui.add_text("Сид")
+                        gui.add_input_text(tag = append_instance_number("input_seed"),
+                                           default_value = "-1", width = -1)
+                    gui.add_separator()
+
+            with gui.tab(label = "Дополнительно"):
+                with gui.group(horizontal = True):
+                    gui.add_text("custom_parameters")
+                    gui.add_input_text(tag = append_instance_number("input_custom_parameters"),
+                                       default_value = "--caption_extension=\".txt\" --prior_loss_weight=1 "
+                                       "--enable_bucket --min_bucket_reso=256 --max_bucket_reso=1024 --use_8bit_adam "
+                                       "--xformers --save_model_as=safetensors --cache_latents", width = -1, height = 100)
+                with gui.group(horizontal = True):
+                    gui.add_text("gradient_checkpointing")
+                    gui.add_checkbox(tag = append_instance_number("checkbox_grad_ckpt"), default_value = False)
+
+                with gui.group(horizontal = True):
+                    gui.add_text("gradient_accumulation_steps")
+                    gui.add_input_text(tag = append_instance_number("input_grad_accum_steps"),
+                                       default_value = "1", width = -1)
+
+                with gui.group(horizontal = True):
+                    gui.add_text("max_data_loader_n_workers")
+                    gui.add_input_text(tag = append_instance_number("input_max_data_loader_workers"),
+                                       default_value = "8", width = -1)
+
+                with gui.group(horizontal = True):
+                    gui.add_text("save_precision")
+                    gui.add_combo(["float", "fp16", "bf16"], tag = append_instance_number("combo_save_precision"),
+                                       default_value = "fp16", width = -1)
+
+                with gui.group(horizontal = True):
+                    gui.add_text("mixed_precision")
+                    gui.add_combo(["fp16", "bf16"], tag = append_instance_number("combo_mixed_precision"),
+                                       default_value = "fp16", width = -1)
+
+                with gui.group(horizontal = True):
+                    button_img_path = path_button(tag = append_instance_number("button_log_dir"), path_type = "folder",
+                                                  label = "logging_dir")
+                    gui.add_input_text(tag = append_instance_number("input_log_dir"), hint = "X:\\LoRA\\logs\\",
+                                       width = -1)
+
+                with gui.group(horizontal = True):
+                    gui.add_text("custom log_prefix")
+                    gui.add_checkbox(tag = append_instance_number("checkbox_custom_log_prefix"), default_value = False,
+                                     callback = custom_log_prefix)
+
+
+
+                with gui.group(tag = append_instance_number("group_custom_log_prefix"), horizontal = True, show = False):
+                    gui.add_text("log_prefix")
+                    gui.add_input_text(tag = append_instance_number("input_custom_log_prefix"),
+                                       default_value = "", width = -1)
+                    gui.bind_item_handler_registry(append_instance_number("checkbox_custom_log_prefix"),
+                                                   append_instance_number("handler_checkbox"))

@@ -1,112 +1,88 @@
-import dearpygui.dearpygui as dpg
+import dearpygui.dearpygui as gui
 import callbacks
+import sys, os, tkinter
 
-dpg.create_context()
+gui.create_context()
+tkinter = tkinter.Tk()
+screen_width = tkinter.winfo_screenwidth()
+screen_height = tkinter.winfo_screenheight()
 app_width = 800
 app_height = 600
 
-def path_button(tag, type, label):
-    if type == "folder":
-        callback = callbacks.path_dialog_show
-    if type == "file":
-        callback = callbacks.file_dialog_show
-    return dpg.add_button(tag = tag, label = label, callback = callback)
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
-with dpg.font_registry():
-    with dpg.font("Assets/FiraSans-Regular.ttf", 20) as default_font:
-        dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
-        dpg.add_font_range_hint(dpg.mvFontRangeHint_Cyrillic)
-    with dpg.font("Assets/FiraSans-Regular.ttf", 14) as default_font_smol:
-        dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
-        dpg.add_font_range_hint(dpg.mvFontRangeHint_Cyrillic)
+font_path = resource_path("Assets/FiraSans-Regular.ttf")
 
-with dpg.file_dialog(directory_selector = True, show = False, modal = True,
-                    callback = callbacks.file_dialog_ok, cancel_callback = callbacks.file_dialog_cancel,
-                    tag = "path_dialog"):
-    dpg.set_item_width("path_dialog", app_width * 0.8)
-    dpg.set_item_height("path_dialog", app_height * 0.8)
-
-with dpg.file_dialog(directory_selector = False, show = False, modal = True,
-                    callback = callbacks.file_dialog_ok, cancel_callback = callbacks.file_dialog_cancel,
-                    tag = "file_dialog"):
-    dpg.set_item_width("file_dialog", app_width * 0.8)
-    dpg.set_item_height("file_dialog", app_height * 0.8)
-    dpg.add_file_extension(".*")
-    dpg.add_file_extension(".ckpt")
-    dpg.add_file_extension(".safetensors")
-    dpg.add_file_extension(".pt")
+with gui.font_registry():
+    with gui.font(font_path, 20) as default_font:
+        gui.add_font_range_hint(gui.mvFontRangeHint_Default)
+        gui.add_font_range_hint(gui.mvFontRangeHint_Cyrillic)
+    with gui.font(font_path, 14) as default_font_14:
+        gui.add_font_range_hint(gui.mvFontRangeHint_Default)
+        gui.add_font_range_hint(gui.mvFontRangeHint_Cyrillic)
 
 
-with dpg.window(tag = "main_window"):
-    dpg.bind_font(default_font)
-    with dpg.tab_bar():
-        with dpg.tab(label = "Пути"):
-            # sd-scripts dir
-            with dpg.group(horizontal = True):
-                button_sdscripts_path = path_button(tag = "button_sdscripts_path", type = "folder",
-                                              label = "Путь к папке sd-scripts")
-                dpg.add_input_text(tag = "input_sdscripts_path", hint = "X:\git\sd-scripts", width = -1)
+with gui.item_handler_registry(tag = "combo_update_lora_list"):
+    gui.add_item_clicked_handler(callback = callbacks.combo_loras)
 
 
-            # ckpt
-            with dpg.group(horizontal = True):
-                button_ckpt_path = path_button(tag = "button_ckpt_path", type = "file",
-                                              label = "SD чекпоинт")
-                dpg.add_input_text(tag = "input_ckpt_path", hint = "X:\models\checkpoint.safetensors", width = -1)
-            with dpg.group(horizontal = True):
-                dpg.add_checkbox(tag = "is_sd_768v_ckpt", label = "768-v", show = False)
-                dpg.add_checkbox(tag = "is_sd_2.x_ckpt", label = "Stable Diffusion 2.x", before = "is_sd_768v_ckpt",
-                                 callback = callbacks.sd_2x)
+with gui.file_dialog(directory_selector = True, show = False, modal = True,
+                     callback = callbacks.file_dialog_ok, cancel_callback = callbacks.file_dialog_cancel,
+                     tag = "path_dialog"):
+    gui.set_item_width("path_dialog", int(app_width * 0.8))
+    gui.set_item_height("path_dialog", int(app_height * 0.8))
 
-            dpg.add_checkbox(tag = "is_use_vae", label = "Использовать VAE", callback = callbacks.use_vae)
+with gui.file_dialog(directory_selector = False, show = False, modal = True,
+                     callback = callbacks.file_dialog_ok, cancel_callback = callbacks.file_dialog_cancel,
+                     tag = "file_dialog"):
+    gui.set_item_width("file_dialog", int(app_width * 0.8))
+    gui.set_item_height("file_dialog", int(app_height * 0.8))
+    gui.add_file_extension(".*")
+    gui.add_file_extension(".ckpt")
+    gui.add_file_extension(".safetensors")
+    gui.add_file_extension(".pt")
 
-            # vae
-            with dpg.group(tag = "group_vae_path", horizontal = True, show = False):
-                button_vae_path = path_button(tag = "button_vae_path", type = "file",
-                                               label = "VAE чекпоинт")
-                dpg.add_input_text(tag = "input_vae_path", hint = "X:\models\\vae.pt", width = -1)
+with gui.window(tag = "main_window"):
+    gui.bind_font(default_font)
+    with gui.tab_bar():
+        with gui.tab(label = "Основная панель"):
+            with gui.child_window(tag = "child_head", height = int(app_height * 0.8), border = False):
+                with gui.tab_bar(tag = "tab_bar_main_panel"):
+                    gui.add_tab_button(label = "+", tag = "tab_button_add_lora_tab", callback = callbacks.add_lora_tab)
+            with gui.child_window(tag = "child_footer", height = -1, border = False):
+                with gui.group(horizontal = True):
+                    gui.add_spacer(width = 300)
+                    gui.add_combo([""], label = "", width = 200, tag = "combo_lora_list")
+                    gui.add_button(label = "Копировать в", callback = callbacks.copy_settings_to_another_tab,
+                                   before = "combo_lora_list")
+                    gui.add_button(label = "Запустить все", callback = callbacks.RUN, width = -1)
+        with gui.tab(label = "Консоль", tag = "tab_console"):
+            with gui.child_window():
+                gui.add_text("помогите мне её сделать :(", tag = "text_console")
 
-            # images dir
-            with dpg.group(horizontal = True):
-                button_img_path = path_button(tag = "button_img_path", type = "folder",
-                                              label = "Папка с изображениями")
-                dpg.add_input_text(tag = "input_img_path", hint = "X:\\training_data\img", width = -1)
 
-            # use reg images
-            dpg.add_checkbox(tag = "is_use_reg_images", label = "Использовать рег. изображения", callback = callbacks.reg_images)
-
-            # reg images dir
-            with dpg.group(tag = "group_reg_images", horizontal = True, show = False):
-                button_reg_img_path = path_button(tag = "button_reg_img_path", type = "folder",
-                                              label = "Папка с рег. изображениями")
-                dpg.add_input_text(tag = "input_reg_img_path", hint = "X:\\training_data\img", width = -1)
-
-            # output dir
-            with dpg.group(horizontal = True):
-                button_output_path = path_button(tag = "button_output_path", type = "folder",
-                                              label = "Папка сохранения сети")
-                dpg.add_input_text(tag = "input_output_path", hint = "X:\LoRA\\", width = -1)
-
-            # output name
-            with dpg.group(horizontal = True):
-                dpg.add_text("Название файла")
-                dpg.add_input_text(tag = "input_output_name", hint = "my_LoRA_network_v1", width = -1)
-
-        with dpg.tab(label = "Длительность"):
-            pass
-        with dpg.tab(label = "Настройки"):
-            pass
-        with dpg.tab(label = "Дополнительно"):
-            pass
-        with dpg.tab(label = "Консоль"):
-            pass
-        dpg.add_tab_button(label = "Запуск", trailing = True)
+gui.bind_item_handler_registry("combo_lora_list", "combo_update_lora_list")
 
 
 # dpg stuff
-dpg.create_viewport(title = "LoRA train GUI", width = app_width, height = app_height, resizable = False)
-dpg.setup_dearpygui()
-dpg.show_viewport()
-dpg.set_primary_window("main_window", True)
-dpg.start_dearpygui()
-dpg.destroy_context()
+gui.create_viewport(title = "LoRA train GUI",
+                    width = app_width,
+                    height = app_height,
+                    x_pos = int((screen_width - app_width) / 2),
+                    y_pos = int((screen_height - app_height) / 2),
+                    resizable = False)
+gui.setup_dearpygui()
+gui.show_viewport()
+gui.set_viewport_vsync(True)
+gui.set_primary_window("main_window", True)
+while gui.is_dearpygui_running():
+    # if gui.is_item_visible("text_console"):
+        # gui.set_value("text_console", callbacks.RUN())
+    gui.render_dearpygui_frame()
+# gui.start_dearpygui()
+gui.destroy_context()
