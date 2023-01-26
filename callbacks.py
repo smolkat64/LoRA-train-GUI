@@ -1,5 +1,4 @@
-import chardet
-import sys, os, webbrowser, subprocess, random, io, time
+import os, webbrowser, subprocess, random, time
 import dearpygui.dearpygui as gui
 
 lora_tab_instances = 0
@@ -221,18 +220,13 @@ def training_duration_method(caller):
     del methods[gui.get_value("radio_training_duration_method" + suffix)]
     for method in methods:
         gui.hide_item(methods.get(method))
-    # print(train_steps(caller, "value"))
-    # if not gui.get_value("input_img_path") is None:
     gui.set_value("text_max_train_steps" + suffix, train_steps(caller, "value"))
-    # else:
-    # gui.set_value("text_max_train_steps" + suffix, "нет изображений")
 
 
 def train_steps(caller, request):
     suffix = append_caller_instance(caller)
     max_train_steps = 0
     if gui.get_value("radio_training_duration_method" + suffix) == "Использовать эпохи":
-        # print("tut")
         max_train_epochs = int(gui.get_value('input_epochs_number' + suffix))
         if gui.get_value("checkbox_is_use_reg_images" + suffix):
             max_train_steps *= 2
@@ -247,7 +241,7 @@ def train_steps(caller, request):
             if request == "value":
                 return int(max_train_steps)
             if request == "arg":
-                return f" --max_train_epochs={max_train_epochs}"
+                return f" --max_train_epochs={ int(max_train_steps) }"
     elif gui.get_value("radio_training_duration_method" + suffix) == "Обучать в течении времени":
         training_speed = float(gui.get_value("input_training_speed" + suffix))
         if gui.get_value("combo_training_speed_type" + suffix) == "s/it":
@@ -260,13 +254,13 @@ def train_steps(caller, request):
         if request == "value":
             return int(max_train_steps)
         if request == "arg":
-            return f" --max_train_steps={max_train_steps}"
+            return f" --max_train_steps={ int(max_train_steps) }"
     else:
         max_train_steps = gui.get_value('input_custom_steps' + suffix)
         if request == "value":
             return max_train_steps
         if request == "arg":
-            return f" --max_train_steps={max_train_steps}"
+            return f" --max_train_steps={ int(max_train_steps) }"
 
 
 def RUN():
@@ -296,9 +290,9 @@ def RUN():
                     f" --output_name=\"{gui.get_value('input_output_name' + suffix)}\"" \
                     f" --save_every_n_epochs={gui.get_value('input_save_every_n_epochs' + suffix)}" \
                     f" --save_last_n_epochs={gui.get_value('input_save_last_n_epochs' + suffix)}" \
-                    f" --learning_rate={gui.get_value('input_learning_rate' + suffix)}" \
-                    f" --unet_lr={gui.get_value('input_unet_learning_rate' + suffix)}" \
-                    f" --text_encoder_lr={gui.get_value('input_TE_learning_rate' + suffix)}" \
+                    f" --learning_rate={round(gui.get_value('input_learning_rate' + suffix), 8)}" \
+                    f" --unet_lr={round(gui.get_value('input_unet_learning_rate' + suffix), 8)}" \
+                    f" --text_encoder_lr={round(gui.get_value('input_TE_learning_rate' + suffix), 8)}" \
                     f" --lr_scheduler={gui.get_value('combo_scheduler' + suffix)}" \
                     f" --resolution={gui.get_value('input_resolution' + suffix)}" \
                     f" --network_dim={gui.get_value('input_network_dim' + suffix)}" \
@@ -319,9 +313,11 @@ def RUN():
         if gui.get_value("checkbox_is_use_vae" + suffix):
             commands += f" --vae=\"{remove_trailing_slashes(gui.get_value('input_vae_path' + suffix))}\""
 
-        max_train_steps = 0
+        max_train_steps = train_steps(suffix, "value")
 
-        if gui.get_value("radio_training_duration_method" + suffix) == "Использовать эпохи":
+        commands += train_steps(suffix, "arg")
+
+        '''if gui.get_value("radio_training_duration_method" + suffix) == "Использовать эпохи":
             max_train_epochs = int(gui.get_value('input_epochs_number' + suffix))
             if gui.get_value("checkbox_is_use_reg_images" + suffix):
                 max_train_steps *= 2
@@ -338,7 +334,7 @@ def RUN():
             commands += f" --max_train_steps={max_train_steps}"
         else:
             max_train_steps = gui.get_value('input_custom_steps' + suffix)
-            commands += f" --max_train_steps={max_train_steps}"
+            commands += f" --max_train_steps={max_train_steps}"'''
 
         if not gui.get_value('combo_scheduler' + suffix) == "constant":
             commands += f" --lr_warmup_steps=" \
@@ -612,7 +608,7 @@ def add_lora_tab():
                     with gui.group(horizontal = True):
                         gui.add_text("Защитить от перемешивания первые")
                         gui.add_input_int(tag = append_instance_number("input_keep_tokens"),
-                                          default_value = 1, width = 50)
+                                          default_value = 1, width = 120)
                         gui.add_text("токенов")
 
                     with gui.group(horizontal = True):
