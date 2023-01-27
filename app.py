@@ -1,3 +1,5 @@
+import time
+
 import callbacks
 import dearpygui.dearpygui as gui
 import DearPyGui_DragAndDrop as dnd
@@ -5,9 +7,11 @@ import sys, os, tkinter
 
 gui.create_context()
 dnd.initialize()
+
 tkinter = tkinter.Tk()
 screen_width = tkinter.winfo_screenwidth()
 screen_height = tkinter.winfo_screenheight()
+
 
 
 def resource_path(relative_path):
@@ -34,13 +38,8 @@ def drag_over(keys):
         dnd.set_drop_effect()
 
 
-font_path = resource_path("Assets/FiraSans-Regular.ttf")
-
 with gui.font_registry():
-    with gui.font(font_path, 20) as default_font:
-        gui.add_font_range_hint(gui.mvFontRangeHint_Default)
-        gui.add_font_range_hint(gui.mvFontRangeHint_Cyrillic)
-    with gui.font(font_path, 14) as default_font_14:
+    with gui.font(resource_path("Assets/FiraSans-Regular.ttf"), 20) as default_font:
         gui.add_font_range_hint(gui.mvFontRangeHint_Default)
         gui.add_font_range_hint(gui.mvFontRangeHint_Cyrillic)
 
@@ -87,7 +86,7 @@ with gui.window(tag = "main_window"):
                         button_sdscripts_path = callbacks.path_button(tag = "button_sdscripts_path",
                                                                       path_type = "folder",
                                                                       label = "Путь к папке sd-scripts")
-                        gui.add_input_text(tag = "input_sdscripts_path", hint = "X:\git\sd-scripts",
+                        gui.add_input_text(tag = "sd_scripts_path", hint = "X:\git\sd-scripts",
                                            width = -1)
                     with gui.group(horizontal = True):
                         # gui.add_text(tag = "text_train_steps")
@@ -133,6 +132,7 @@ with gui.window(tag = "main_window"):
                 with gui.table_row():
                     gui.add_spacer()
                     gui.add_loading_indicator(radius = 8.5, color = (255, 255, 255), secondary_color = (128, 128, 128))
+    callbacks.add_lora_tab()
 
 
 gui.bind_theme(test_theme)
@@ -140,6 +140,8 @@ gui.bind_item_handler_registry("combo_lora_list", "combo_update_lora_list")
 
 dnd.set_drop(drop)
 dnd.set_drag_over(drag_over)
+
+callbacks.get_sd_scripts_path_from_registry()
 
 # dpg stuff
 gui.create_viewport(title = "LoRA train GUI v" + callbacks.current_version,
@@ -156,8 +158,6 @@ gui.show_viewport()
 gui.set_viewport_vsync(True)
 gui.set_primary_window("main_window", True)
 while gui.is_dearpygui_running():
-    # if gui.is_item_visible("text_console"):
-    # gui.set_value("text_console", callbacks.RUN())
     gui.render_dearpygui_frame()
 # gui.start_dearpygui()
 gui.destroy_context()
