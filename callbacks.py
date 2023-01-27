@@ -1,10 +1,14 @@
 import decimal
-import os, webbrowser, subprocess, random, time, math
+import os, webbrowser, subprocess, random, time
 import dearpygui.dearpygui as gui
+from ast import literal_eval
 
+current_version = "0.2"
+app_width = 800
+app_height = 650
 lora_tab_instances = 0
 active_tab = ""
-list_settings = ["input_ckpt_path", "checkbox_is_sd_768v_ckpt", "checkbox_is_sd_2.x_ckpt",
+list_settings = ["input_ckpt_path", "checkbox_is_sd_768v_ckpt", "checkbox_is_sd_2x_ckpt",
                  "checkbox_is_use_vae", "input_vae_path", "input_img_path", "checkbox_is_use_reg_images",
                  "input_reg_img_path",
                  "input_output_path", "input_output_name", "radio_training_duration_method", "input_epochs_number",
@@ -27,6 +31,71 @@ def _help(message):
     t = gui.add_text("(?)", color = [0, 255, 0])
     with gui.tooltip(t):
         gui.add_text(message)
+
+
+def _info_popup(message):
+    if message is not None:
+        with gui.window(no_move = True, no_collapse = True, no_resize = True, width = app_width / 2,
+                        height = app_height / 2, pos = [200, 137.5], modal = True):
+            gui.add_text(message)
+
+
+def import_popup():
+    gui.show_item("popup_import")
+
+
+def export_settings():
+    if get_active_tab() == 0:
+        _info_popup("Невозможно экспортировать: нет активных\n"
+                    "вкладок.")
+        return
+    suffix = append_caller_instance(get_active_tab())
+    print(get_active_tab())
+    settings_file = ["version=" + current_version + "\n", "\n", "##### SETTINGS #####\n", "\n"]
+    for setting in list_settings:
+        setting_value = gui.get_value(setting + suffix)
+        if setting_value:
+            settings_file.append(setting + ": " + str(setting_value) + "\n")
+    filename = str(gui.get_value("input_output_name" + suffix)) + "_settings.ini"
+    with open(filename, "w") as file:
+        print("Записываем настройки в файл:", filename)
+        file.writelines(settings_file)
+        _info_popup("Настройки экспортированы в файл\n"
+                    "" + filename)
+
+
+def str2bool(v):
+  return v.lower() in ("yes", "true", "t", "1")
+
+
+def import_settings(data):
+    if get_active_tab() == 0:
+        return
+    suffix = append_caller_instance(get_active_tab())
+    settings_file = open(data, "r").readlines()
+    # print(settings_file)
+    for line in settings_file:
+        line_split = line.split(": ", 1)
+        item = line_split[0].strip() + suffix
+        value = line_split[-1].strip()
+        if gui.does_item_exist(item):
+            item_type = type(gui.get_value(item))
+            # print(item, item_type, value)
+            if item_type == dict:
+                gui.set_value(item, literal_eval(value))
+            elif item_type == int:
+                gui.set_value(item, int(value))
+            elif item_type == float:
+                gui.set_value(item, float(value))
+            elif item_type == str:
+                if value.lower == 'true' or value.lower == 'false':
+                    gui.set_value(item, str2bool(value))
+                else:
+                    gui.set_value(item, value)
+            elif item_type == bool:
+                gui.set_value(item, str2bool(value))
+            else:
+                print("Несовместимая переменная:", item, "=", value, "типа", type(value))
 
 
 def path_button(tag, path_type, label):
@@ -75,11 +144,19 @@ def append_caller_instance(caller_instance):
     return "_" + get_caller_instance(caller_instance)
 
 
-def lora_tab_name(caller):
+'''def lora_tab_name(caller):
     suffix = append_caller_instance(caller)
     gui.set_item_label("tab_lora" + suffix, gui.get_value("input_output_name" + suffix))
     if gui.get_item_label("tab_lora" + suffix) == "":
-        gui.set_item_label("tab_lora" + suffix, "Tab " + get_caller_instance(caller))
+        gui.set_item_label("tab_lora" + suffix, "Tab " + get_caller_instance(caller))'''
+
+
+def lora_tab_update_name(caller):
+    suffix = append_caller_instance(caller)
+    gui.set_item_label("tab_lora" + suffix, gui.get_value("input_output_name" + suffix))
+    if gui.get_value("input_output_name" + suffix) == "":
+        gui.set_item_label("tab_lora" + suffix, "anon (" + get_caller_instance(caller) + ")")
+
 
 
 def calculate_lora_tab_count():
@@ -164,7 +241,7 @@ def file_dialog_cancel():
 
 def sd_2x(caller):
     suffix = append_caller_instance(caller)
-    if gui.get_value("checkbox_is_sd_2.x_ckpt" + suffix):
+    if gui.get_value("checkbox_is_sd_2x_ckpt" + suffix):
         gui.show_item("checkbox_is_sd_768v_ckpt" + suffix)
     else:
         gui.set_value("checkbox_is_sd_768v_ckpt" + suffix, False)
@@ -214,8 +291,8 @@ def copy_settings_to_another_tab(user_data):
         if gui.get_value("combo_lora_list") == lora:
             send_to_suffix = gui.get_item_user_data("combo_lora_list")[i]
         i += 1
-    print("Sending settings from: ", get_active_tab())
-    print("To: ", "tab_lora" + send_to_suffix)
+    print("Копируем настройки из:", get_active_tab())
+    print("В:", "tab_lora" + send_to_suffix)
     for setting in list_settings:
         # print(setting + send_to_suffix, " -> ", gui.get_value(setting + "_" + active_tab.split('_')[-1]))
         try:
@@ -223,6 +300,8 @@ def copy_settings_to_another_tab(user_data):
         except SystemError:
             print("##### Error in: ", setting + send_to_suffix, " -> ",
                   gui.get_value(setting + "_" + active_tab.split('_')[-1]))
+    gui.set_value("input_output_name" + send_to_suffix, gui.get_value("input_output_name" + send_to_suffix) + "_copy")
+    gui.set_value("combo_lora_list", "")
 
 
 def get_active_tab():
@@ -288,7 +367,10 @@ def train_steps(caller, request):
 def RUN():
     tab_count = calculate_lora_tab_count()
     gui.hide_item("modal_run")
-    time.sleep(1)
+    time.sleep(0.5)
+    if tab_count < 1:
+        _info_popup("Нечего обучать!")
+        return
     for i in range(1, tab_count + 1):
         commands = ""
         suffix = "_" + str(i)
@@ -331,7 +413,7 @@ def RUN():
             commands += f" --learning_rate={decimal.Decimal(gui.get_value('input_learning_rate' + suffix))}"
 
 
-        if gui.get_value("checkbox_is_sd_2.x_ckpt" + suffix):
+        if gui.get_value("checkbox_is_sd_2x_ckpt" + suffix):
             commands += " --v2"
             if gui.get_value("checkbox_is_sd_768v_ckpt" + suffix):
                 commands += " --v_parameterization"
@@ -355,8 +437,11 @@ def RUN():
         if not gui.get_value('slider_int_clip_skip' + suffix) == "1":
             commands += f" --clip_skip={gui.get_value('slider_int_clip_skip' + suffix)}"
 
-        if gui.get_value('input_network_alpha' + suffix) is not None:
-            commands += f" --network_alpha={gui.get_value('input_network_alpha' + suffix)}"
+        network_alpha = gui.get_value('input_network_alpha' + suffix)
+
+        if network_alpha:
+            if not network_alpha == "0":
+                commands += f" --network_alpha={network_alpha}"
 
         if gui.get_value('checkbox_shuffle_caption' + suffix):
             commands += " --shuffle_caption"
@@ -422,10 +507,16 @@ def add_lora_tab():
     with gui.item_handler_registry(tag = append_instance_number("handler_combo")):
         gui.add_item_visible_handler(callback = scheduler, tag = append_instance_number("visibility_handler_scheduler"))
 
+    with gui.item_handler_registry(tag = append_instance_number("handler_tab")):
+        gui.add_item_visible_handler(callback = lora_tab_update_name, tag = append_instance_number("visibility_handler_tab_name"))
+
     with gui.tab(tag = append_instance_number("tab_lora"), before = "tab_button_add_lora_tab",
                  label = "network_" + str(tab_number), closable = True):
         calculate_lora_tab_count()
         with gui.tab_bar(tag = append_instance_number("tab_bar_lora")):
+
+            gui.bind_item_handler_registry(append_instance_number("tab_lora"), append_instance_number("handler_tab"))
+
             with gui.tab(label = "Пути"):
                 # ckpt
                 with gui.group(horizontal = True):
@@ -437,10 +528,10 @@ def add_lora_tab():
                 with gui.group(horizontal = True):
                     gui.add_checkbox(tag = append_instance_number("checkbox_is_sd_768v_ckpt"), label = "768-v",
                                      show = False)
-                    gui.add_checkbox(tag = append_instance_number("checkbox_is_sd_2.x_ckpt"),
+                    gui.add_checkbox(tag = append_instance_number("checkbox_is_sd_2x_ckpt"),
                                      label = "Stable Diffusion 2.x",
                                      before = append_instance_number("checkbox_is_sd_768v_ckpt"))
-                    gui.bind_item_handler_registry(append_instance_number("checkbox_is_sd_2.x_ckpt"),
+                    gui.bind_item_handler_registry(append_instance_number("checkbox_is_sd_2x_ckpt"),
                                                    append_instance_number("handler_checkbox"))
 
                 # vae checkbox
@@ -490,7 +581,7 @@ def add_lora_tab():
                 with gui.group(horizontal = True):
                     gui.add_text("Имя файла")
                     gui.add_input_text(tag = append_instance_number("input_output_name"), hint = "my_LoRA_network",
-                                       width = -1, callback = lora_tab_name,
+                                       width = -1,
                                        default_value = gui.get_item_label(append_instance_number("tab_lora")))
 
             with gui.tab(label = "Длительность"):
@@ -617,7 +708,8 @@ def add_lora_tab():
                     with gui.group(horizontal = True):
                         gui.add_text("CLIP Skip")
                         _help("Использовать вывод текстового\n"
-                              "энкодера с конца N-ного слоя.\n"
+                              "энкодера N-ного слоя с конца.\n"
+                              "1 означает тренировать все слои.\n"
                               "1 для SD-основаных чекпоинтов,\n"
                               "2 для NAI-основанных чекпоинтов.\n"
                               "С помощью Ctrl+ЛКМ можно ввести\n"
@@ -633,7 +725,8 @@ def add_lora_tab():
                     with gui.group(horizontal = True):
                         gui.add_text("Альфа сети")
                         _help("Добавлено в версии sd-scripts 0.4.0.\n"
-                              "Если у вас старая версия, поставьте 0.")
+                              "Если у вас старая версия, оставьте поле\n"
+                              "пустым или поставьте 0.")
                         gui.add_input_text(tag = append_instance_number("input_network_alpha"),
                                            default_value = '1', width = -1, decimal = True)
 
