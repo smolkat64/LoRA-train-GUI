@@ -1,7 +1,58 @@
-import math
+from lora_tab import LoRATab
 import os, webbrowser, subprocess, random, time, winreg
 import dearpygui.dearpygui as gui
 from ast import literal_eval
+
+scheduler_list = ["linear", "cosine", "cosine_with_restarts",
+                  "polynomial", "constant", "constant_with_warmup"]
+max_token_length_list = ["75", "150", "225"]
+training_method_list = ["Использовать эпохи", "Обучать в течении времени", "Своё количество шагов"]
+
+tabs = list()
+default_settings_dict = { "pretrained_model_name_or_path": "",
+                          "v2": False,
+                          "v_parameterization": False,
+                          "use_vae": False,
+                          "vae": "",
+                          "train_data_dir": "",
+                          "use_reg_data": False,
+                          "reg_data_dir": "",
+                          "output_dir": "",
+                          "output_name": "",
+                          "training_duration_method": "Использовать эпохи",
+                          "max_train_epochs": "10",
+                          "train_time": {'hour': 0, 'min': 60, 'sec': 0},
+                          "train_speed": "1.00",
+                          "train_speed_type": "it/s",
+                          "max_train_steps": "1000",
+                          "train_batch_size": "1",
+                          "save_every_n_epochs": "1",
+                          "save_last_n_epochs": "1",
+                          "use_separate_lr": False,
+                          "learning_rate": "5e-4",
+                          "unet_lr": "5e-4",
+                          "text_encoder_lr": "2.5e-4",
+                          "lr_scheduler": scheduler_list[0],
+                          "lr_warmup_ratio": 0.0,
+                          "resolution": "512,512",
+                          "clip_skip": 1,
+                          "network_dim": "128",
+                          "network_alpha": "",
+                          "shuffle_caption": True,
+                          "max_token_length": max_token_length_list[2],
+                          "keep_tokens": "1",
+                          "seed": "-1",
+                          "additional_parameters": """--caption_extension=\".txt\" --prior_loss_weight=1 \
+                                                   --enable_bucket --min_bucket_reso=256 --max_bucket_reso=1024 --use_8bit_adam \
+                                                   --xformers --save_model_as=safetensors --cache_latents"}""",
+                          "gradient_checkpointing": False,
+                          "gradient_accumulation_steps": "1",
+                          "max_data_loader_n_workers": "8",
+                          "save_precision": "fp16",
+                          "mixed_precision": "fp16",
+                          "logging_dir": "",
+                          "use_custom_log_prefix": False,
+                          "log_prefix": ""}
 
 current_version = "0.21"
 default_script = "ltg_default.ini"
@@ -85,7 +136,7 @@ def import_settings(data, destination):
     print("Импортируем настройки")
     is_any_setting_imported = False
     for line in settings_file:
-        if line.count(':'):
+        if ':' in line:
             line_split = line.split(": ", 1)
         else:
             continue
@@ -407,6 +458,11 @@ def train_steps(caller, request):
 
 
 def RUN():
+
+
+
+
+
     sd_scripts_path_to_registry()
     tab_count = calculate_lora_tab_count()
     gui.hide_item("modal_run")
@@ -471,10 +527,10 @@ def RUN():
         max_train_steps = train_steps(suffix, "value")
         commands += train_steps(suffix, "arg")
 
-        if not gui.get_value('lr_scheduler' + suffix) == 'constant':
+        if gui.get_value('lr_scheduler' + suffix) != 'constant':
             try:
                 commands += " --lr_warmup_steps=" \
-                            f"{(int(gui.get_value('lr_warmup_ratio' + suffix)) // 100) * int(max_train_steps)}"
+                            f"{int(gui.get_value('lr_warmup_ratio' + suffix) / 100 * int(max_train_steps))}"
             except ValueError:
                 print('Не удалось расчитать количество шагов lr_warmup_steps: ошибка в папке с изображениями')
                 continue
@@ -528,6 +584,11 @@ tab_number = 0
 
 
 def add_lora_tab():
+    tabs.append(LoRATab(default_settings_dict))
+
+
+
+
     global lora_tab_instances
     lora_tab_instances += 1
 
@@ -770,7 +831,7 @@ def add_lora_tab():
                     with gui.group(horizontal = True):
                         gui.add_text("Альфа сети")
                         _help("Добавлено в версии sd-scripts 0.4.0.\n"
-                              "Если не указана, равна единице."
+                              "Если не указана, равна единице.\n"
                               "Если у вас старая версия, оставьте поле\n"
                               "пустым.\n")
                         gui.add_input_text(tag = append_instance_number("network_alpha"),
@@ -803,7 +864,7 @@ def add_lora_tab():
 
             with gui.tab(label = "Дополнительно"):
                 with gui.group(horizontal = True):
-                    gui.add_text("custom_parameters")
+                    gui.add_text("additional_parameters")
                     gui.add_input_text(tag = append_instance_number("additional_parameters"),
                                        default_value = "--caption_extension=\".txt\" --prior_loss_weight=1 "
                                                        "--enable_bucket --min_bucket_reso=256 --max_bucket_reso=1024 --use_8bit_adam "
@@ -851,6 +912,8 @@ def add_lora_tab():
                 with gui.group(tag = append_instance_number("group_custom_log_prefix"), horizontal = True,
                                show = False):
                     gui.add_text("log_prefix")
+                    _help("Если отключен, в качестве префикса\n"
+                          "папки логов используется имя сети")
                     gui.add_input_text(tag = append_instance_number("log_prefix"),
                                        default_value = "", width = -1)
                     gui.bind_item_handler_registry(append_instance_number("use_custom_log_prefix"),
