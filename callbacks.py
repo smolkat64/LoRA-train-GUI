@@ -1,3 +1,4 @@
+import math
 import os, webbrowser, subprocess, random, time, winreg
 import dearpygui.dearpygui as gui
 from ast import literal_eval
@@ -81,7 +82,7 @@ def import_settings(data, destination):
             print("Файл настроек для версии", settings_file_version)
     except ValueError:
         pass
-    print("Импортируем настройки:")
+    print("Импортируем настройки")
     is_any_setting_imported = False
     for line in settings_file:
         if line.count(':'):
@@ -90,7 +91,7 @@ def import_settings(data, destination):
             continue
         item = line_split[0].strip() + suffix
         value = line_split[-1].strip()
-        print(line_split[0], '=', value)
+        # print(line_split[0], '=', value)
         if gui.does_item_exist(item):
             is_any_setting_imported = True
             item_type = type(gui.get_value(item))
@@ -436,6 +437,7 @@ def RUN():
                     f" --output_name=\"{gui.get_value('output_name' + suffix)}\"" \
                     f" --save_every_n_epochs={gui.get_value('save_every_n_epochs' + suffix)}" \
                     f" --save_last_n_epochs={gui.get_value('save_last_n_epochs' + suffix)}" \
+                    f" --train_batch_size={gui.get_value('train_batch_size' + suffix)}" \
                     f" --lr_scheduler={gui.get_value('lr_scheduler' + suffix)}" \
                     f" --resolution=\"{gui.get_value('resolution' + suffix)}\"" \
                     f" --network_dim={gui.get_value('network_dim' + suffix)}" \
@@ -469,12 +471,20 @@ def RUN():
         max_train_steps = train_steps(suffix, "value")
         commands += train_steps(suffix, "arg")
 
-        if not gui.get_value('lr_scheduler' + suffix) == "constant":
+        '''if not gui.get_value('lr_scheduler' + suffix) == "constant":
             try:
                 commands += f" --lr_warmup_steps=" \
-                            f"{int((gui.get_value('lr_warmup_ratio' + suffix) / 100) * int(max_train_steps))}"
+                            f"{int((gui.get_value('lr_warmup_ratio' + suffix) // 100) * int(max_train_steps))}"
             except ValueError:
-                pass
+                pass'''
+
+        if not gui.get_value('lr_scheduler' + suffix) == 'constant':
+            try:
+                commands += " --lr_warmup_steps=" \
+                            f"{(int(gui.get_value('lr_warmup_ratio' + suffix)) // 100) * int(max_train_steps)}"
+            except ValueError:
+                print('Не удалось расчитать количество шагов lr_warmup_steps: ошибка в папке с изображениями')
+                continue
 
         if not gui.get_value('clip_skip' + suffix) == "1":
             commands += f" --clip_skip={gui.get_value('clip_skip' + suffix)}"
@@ -503,7 +513,7 @@ def RUN():
             log_prefix = gui.get_value('output_name' + suffix) + "_"
             if gui.get_value('use_custom_log_prefix' + suffix):
                 log_prefix = gui.get_value('log_prefix' + suffix)
-            commands += f" --log_prefix=\"{log_prefix.replace(' ', '')}\""
+            commands += f" --log_prefix=\"{log_prefix}\""
 
         commands += f" {gui.get_value('additional_parameters' + suffix)}\n"
         proc = subprocess.Popen("powershell", stdin = subprocess.PIPE).communicate(input = commands.encode())
@@ -670,6 +680,7 @@ def add_lora_tab():
 
                 with gui.group(horizontal = True):
                     gui.add_text("Размер обучающей партии")
+                    _help("train_batch_size")
                     gui.add_input_text(tag = append_instance_number("train_batch_size"), default_value = '1',
                                        width = -1, decimal = True)
 

@@ -26,7 +26,7 @@ def drop(data, keys):
     gui.bind_item_theme(import_window, None)
     dnd.set_drop_effect()
     gui.hide_item(import_window)
-    callbacks.import_settings(data[0])
+    callbacks.import_settings(data[0], gui.get_value("tab_bar_main_panel"))
 
 
 def drag_over(keys):
