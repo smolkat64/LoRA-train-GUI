@@ -471,13 +471,6 @@ def RUN():
         max_train_steps = train_steps(suffix, "value")
         commands += train_steps(suffix, "arg")
 
-        '''if not gui.get_value('lr_scheduler' + suffix) == "constant":
-            try:
-                commands += f" --lr_warmup_steps=" \
-                            f"{int((gui.get_value('lr_warmup_ratio' + suffix) // 100) * int(max_train_steps))}"
-            except ValueError:
-                pass'''
-
         if not gui.get_value('lr_scheduler' + suffix) == 'constant':
             try:
                 commands += " --lr_warmup_steps=" \
