@@ -474,7 +474,7 @@ def RUN():
         if not gui.get_value('lr_scheduler' + suffix) == 'constant':
             try:
                 commands += " --lr_warmup_steps=" \
-                            f"{(int(gui.get_value('lr_warmup_ratio' + suffix)) // 100) * int(max_train_steps)}"
+                            f"{int(gui.get_value('lr_warmup_ratio' + suffix) / 100 * int(max_train_steps))}"
             except ValueError:
                 print('Не удалось расчитать количество шагов lr_warmup_steps: ошибка в папке с изображениями')
                 continue
