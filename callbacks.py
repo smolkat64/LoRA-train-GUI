@@ -20,7 +20,7 @@ list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "u
                  "network_dim", "network_alpha", "shuffle_caption", "max_token_length",
                  "keep_tokens", "seed", "gradient_checkpointing", "gradient_accumulation_steps",
                  "max_data_loader_n_workers", "save_precision", "mixed_precision", "logging_dir",
-                 "use_custom_log_prefix", "log_prefix", "enable_tensorboard", "additional_parameters"]
+                 "use_custom_log_prefix", "log_prefix", "enable_tensorboard", "check_tensors", "additional_parameters"]
 
 
 def _help(message):
@@ -520,6 +520,17 @@ def RUN():
         commands += f" {gui.get_value('additional_parameters' + suffix)}\n"
         proc = subprocess.Popen("powershell", stdin = subprocess.PIPE).communicate(input = commands.encode())
         # proc
+        if gui.get_value('check_tensors' + suffix): # Этот говнокод положит рядом с логами для тензорборда прочеканные тензоры в тхт файл, по которым потом можно выполнить поиск через notepad++ например 0.0\r\n с search mode extended. При нажатии на count должно выдавать 6 при втором клип скипе, иначе тензоры в каких то слоях проебались.
+            log_dir = gui.get_value('logging_dir' + suffix)
+            lora_name = gui.get_value('output_name' + suffix)
+            lora_location = gui.get_value('output_dir' + suffix) + "\\" + gui.get_value('output_name' + suffix) + ".safetensors"
+            commands = "[console]::OutputEncoding = [text.encoding]::UTF8\n"
+            # блять jfs ебать ты чед
+            commands += "$env:PYTHONIOENCODING = 'utf-8'\n"
+            commands += f"Set-Location \"{gui.get_value('sd_scripts_path')}\"\n"
+            commands += ".\\venv\Scripts\\activate\n"
+            commands += f"python networks\\check_lora_weights.py {lora_location} > {log_dir}\\{lora_name}.txt"
+            proc = subprocess.Popen("powershell", stdin=subprocess.PIPE).communicate(input=commands.encode())
 
     gui.hide_item("modal_training")
 
@@ -860,6 +871,10 @@ def add_lora_tab():
                 with gui.group(horizontal=True):
                     gui.add_text("enable_tensorboard")
                     gui.add_checkbox(tag=append_instance_number("enable_tensorboard"), default_value=False)
+
+                with gui.group(horizontal=True):
+                    gui.add_text("check_tensors")
+                    gui.add_checkbox(tag=append_instance_number("check_tensors"), default_value=False)
 
                 with gui.group(tag = append_instance_number("group_custom_log_prefix"), horizontal = True,
                                show = False):
