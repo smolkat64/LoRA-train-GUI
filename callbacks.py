@@ -2,6 +2,7 @@ import math
 import os, webbrowser, subprocess, random, time, winreg
 import dearpygui.dearpygui as gui
 from ast import literal_eval
+from tensorboard import program
 
 current_version = "0.21"
 default_script = "ltg_default.ini"
@@ -19,7 +20,7 @@ list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "u
                  "network_dim", "network_alpha", "shuffle_caption", "max_token_length",
                  "keep_tokens", "seed", "gradient_checkpointing", "gradient_accumulation_steps",
                  "max_data_loader_n_workers", "save_precision", "mixed_precision", "logging_dir",
-                 "use_custom_log_prefix", "log_prefix", "additional_parameters"]
+                 "use_custom_log_prefix", "log_prefix", "enable_tensorboard", "additional_parameters"]
 
 
 def _help(message):
@@ -508,6 +509,14 @@ def RUN():
                 log_prefix = gui.get_value('log_prefix' + suffix)
             commands += f" --log_prefix=\"{log_prefix}\""
 
+        if gui.get_value('enable_tensorboard' + suffix):
+            log_dir = gui.get_value('logging_dir' + suffix)
+            tb = program.TensorBoard()
+            tb.configure(argv=[None, '--logdir', log_dir])
+            url = tb.launch()
+            print(f"Tensorflow listening on {url}")
+            webbrowser.open_new_tab("http://localhost:6006/")
+
         commands += f" {gui.get_value('additional_parameters' + suffix)}\n"
         proc = subprocess.Popen("powershell", stdin = subprocess.PIPE).communicate(input = commands.encode())
         # proc
@@ -807,7 +816,7 @@ def add_lora_tab():
                     gui.add_input_text(tag = append_instance_number("additional_parameters"),
                                        default_value = "--caption_extension=\".txt\" --prior_loss_weight=1 "
                                                        "--enable_bucket --min_bucket_reso=256 --max_bucket_reso=1024 --use_8bit_adam "
-                                                       "--xformers --save_model_as=safetensors --cache_latents",
+                                                       "--xformers --save_model_as=safetensors --cache_latents --persistent_data_loader_workers", # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.2
                                        width = -1, height = 100)
                 with gui.group(horizontal = True):
                     gui.add_text("gradient_checkpointing")
@@ -825,7 +834,7 @@ def add_lora_tab():
                           "значения могут негативно сказаться\n"
                           "скорости обучения.")
                     gui.add_input_text(tag = append_instance_number("max_data_loader_n_workers"),
-                                       default_value = '8', width = -1, decimal = True)
+                                       default_value = '4', width = -1, decimal = True)
 
                 with gui.group(horizontal = True):
                     gui.add_text("save_precision")
@@ -847,6 +856,10 @@ def add_lora_tab():
                     gui.add_text("use_custom_log_prefix")
                     gui.add_checkbox(tag = append_instance_number("use_custom_log_prefix"), default_value = False,
                                      callback = custom_log_prefix)
+
+                with gui.group(horizontal=True):
+                    gui.add_text("enable_tensorboard")
+                    gui.add_checkbox(tag=append_instance_number("enable_tensorboard"), default_value=False)
 
                 with gui.group(tag = append_instance_number("group_custom_log_prefix"), horizontal = True,
                                show = False):
