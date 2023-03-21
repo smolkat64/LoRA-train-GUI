@@ -19,7 +19,7 @@ list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "u
                  "lr_scheduler", "lr_warmup_ratio", "resolution", "clip_skip",
                  "network_dim", "network_alpha", "shuffle_caption", "max_token_length",
                  "keep_tokens", "seed", "gradient_checkpointing", "gradient_accumulation_steps",
-                 "max_data_loader_n_workers", "save_precision", "mixed_precision", "logging_dir",
+                 "max_data_loader_n_workers", "save_precision", "mixed_precision", "optimizer_type", "logging_dir",
                  "use_custom_log_prefix", "log_prefix", "enable_tensorboard", "check_tensors", "additional_parameters"]
 
 
@@ -451,6 +451,13 @@ def RUN():
                     # f" --unet_lr={round(gui.get_value('unet_lr' + suffix), 8)}" \
                     # f" --text_encoder_lr={round(gui.get_value('text_encoder_lr' + suffix), 8)}"
 
+        optimizer_type = (gui.get_value('optimizer_type' + suffix))
+        if optimizer_type == "Old_version":  # old version compatibility
+            commands += f" --use_8bit_adam"
+        elif optimizer_type != "Old_version":
+            commands += f" --optimizer_type={gui.get_value('optimizer_type' + suffix)}"  # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.4
+                                                                                         # pip install lion-pytorch dadaptation в венве с сд-скриптс, чтобы юзать новые оптимайзеры
+
         if gui.get_value("use_separate_lr" + suffix):
             commands += f" --unet_lr={gui.get_value('unet_lr' + suffix)}"
             commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
@@ -826,7 +833,7 @@ def add_lora_tab():
                     gui.add_text("custom_parameters")
                     gui.add_input_text(tag = append_instance_number("additional_parameters"),
                                        default_value = "--caption_extension=\".txt\" --prior_loss_weight=1 "
-                                                       "--enable_bucket --min_bucket_reso=256 --max_bucket_reso=1024 --use_8bit_adam "
+                                                       "--enable_bucket --min_bucket_reso=256 --max_bucket_reso=1024 "
                                                        "--xformers --save_model_as=safetensors --cache_latents --persistent_data_loader_workers", # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.2
                                        width = -1, height = 100)
                 with gui.group(horizontal = True):
@@ -856,6 +863,11 @@ def add_lora_tab():
                     gui.add_text("mixed_precision")
                     gui.add_combo(["fp16", "bf16"], tag = append_instance_number("mixed_precision"),
                                   default_value = "fp16", width = -1)
+
+                with gui.group(horizontal = True):
+                    gui.add_text("optimizer_type")
+                    gui.add_combo(["Old_version", "AdamW", "AdamW8bit", "Lion", "SGDNesterov", "SGDNesterov8bit", "DAdaptation", "AdaFactor"], tag = append_instance_number("optimizer_type"),
+                                  default_value = "AdamW8bit", width = -1)
 
                 with gui.group(horizontal = True):
                     button_img_path = path_button(tag = append_instance_number("button_log_dir"), path_type = "folder",
