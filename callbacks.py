@@ -4,7 +4,7 @@ import dearpygui.dearpygui as gui
 from ast import literal_eval
 from tensorboard import program
 
-current_version = "0.21"
+current_version = "0.22"
 default_script = "ltg_default.ini"
 app_width = 800
 app_height = 650
@@ -518,11 +518,11 @@ def RUN():
 
         if gui.get_value('enable_tensorboard' + suffix):
             log_dir = gui.get_value('logging_dir' + suffix)
-            tb = program.TensorBoard()
+            tb = program.TensorBoard(assets_zip_provider=lambda: open("webfiles.zip", "rb")) # Положить webfiles.zip рядом с экзешником, чтобы работало не только в состоянии скрипта
             tb.configure(argv=[None, '--logdir', log_dir])
             url = tb.launch()
             print(f"Tensorflow listening on {url}")
-            webbrowser.open_new_tab("http://localhost:6006/")
+            webbrowser.open_new_tab(url)
 
         commands += f" {gui.get_value('additional_parameters' + suffix)}\n"
         proc = subprocess.Popen("powershell", stdin = subprocess.PIPE).communicate(input = commands.encode())
