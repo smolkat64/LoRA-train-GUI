@@ -476,10 +476,13 @@ def RUN():
                                                                                          # pip install lion-pytorch dadaptation в венве с сд-скриптс, чтобы юзать новые оптимайзеры
 
         if gui.get_value('optimizer_args' + suffix):
-            commands += f" {gui.get_value('optimizer_args' + suffix)}\n"
+            commands += f" --optimizer_args {gui.get_value('optimizer_args' + suffix)}"
 
         if gui.get_value("use_separate_lr" + suffix):
             commands += f" --unet_lr={gui.get_value('unet_lr' + suffix)}"
+            commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
+        elif optimizer_type == "DAdaptation":
+            commands += f" --learning_rate={gui.get_value('unet_lr' + suffix)}"
             commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
         else:
             commands += f" --learning_rate={gui.get_value('learning_rate' + suffix)}"
