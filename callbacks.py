@@ -22,6 +22,8 @@ list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "u
                  "keep_tokens", "seed", "gradient_checkpointing", "gradient_accumulation_steps",
                  "max_data_loader_n_workers", "save_precision", "mixed_precision", "optimizer_type", "optimizer_args",
                  "logging_dir", "use_custom_log_prefix", "log_prefix", "enable_tensorboard", "check_tensors",
+                 "LoCON", "locon_dim", "locon_dim_string", "locon_alpha", "locon_alpha_string",
+                 "dylora_unit", "dylora_unit_string",
                  "additional_parameters"]
 
 
@@ -238,6 +240,30 @@ def custom_scheduler_name(caller):
     if not gui.get_value("use_custom_scheduler" + suffix):
         gui.show_item("scheduler" + suffix)
         gui.hide_item("scheduler_name" + suffix)
+
+
+def locon(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("LoCON" + suffix):
+        gui.show_item("locon_dim" + suffix)
+        gui.show_item("locon_alpha" + suffix)
+    if not gui.get_value("LoCON" + suffix):
+        gui.hide_item("locon_dim" + suffix)
+        gui.hide_item("locon_alpha" + suffix)
+
+def additional_network_args(caller):
+    suffix = append_caller_instance(caller)
+    all_args = ""
+    if gui.get_value('locon_dim_string' + suffix):
+        locon_dim = gui.get_value('locon_dim_string' + suffix)
+        all_args += f"\"conv_dim={locon_dim}\" "
+    if gui.get_value('locon_alpha_string' + suffix):
+        locon_alpha = gui.get_value('locon_alpha_string' + suffix)
+        all_args += f"\"conv_alpha={locon_alpha}\" "
+    if gui.get_value('dylora_unit_string' + suffix):
+        dylora_unit = gui.get_value('dylora_unit_string' + suffix)
+        all_args += f"\"unit={dylora_unit}\" "
+    return all_args
 
 
 def combo_loras():
@@ -466,7 +492,13 @@ def RUN():
             commands += f" --lr_scheduler_type={gui.get_value('scheduler_name_string' + suffix)}"
 
         if gui.get_value('scheduler_args' + suffix):
-            commands += f" --lr_scheduler_args={gui.get_value('scheduler_args' + suffix)}"
+            scheduler_args = gui.get_value('scheduler_args' + suffix)
+            if "--lr_scheduler_num_cycles" in scheduler_args:
+                commands += f" {gui.get_value('scheduler_args' + suffix)}"
+            elif "--lr_scheduler_power" in scheduler_args:
+                commands += f" {gui.get_value('scheduler_args' + suffix)}"
+            else:
+                commands += f" --lr_scheduler_args={gui.get_value('scheduler_args' + suffix)}"
 
         optimizer_type = (gui.get_value('optimizer_type' + suffix))
         if optimizer_type == "Old_version":  # old version compatibility
@@ -479,11 +511,13 @@ def RUN():
             commands += f" --optimizer_args {gui.get_value('optimizer_args' + suffix)}"
 
         if gui.get_value("use_separate_lr" + suffix):
-            commands += f" --unet_lr={gui.get_value('unet_lr' + suffix)}"
-            commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
-        elif optimizer_type == "DAdaptation":
-            commands += f" --learning_rate={gui.get_value('unet_lr' + suffix)}"
-            commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
+            if optimizer_type == "DAdaptation":
+                commands += f" --learning_rate={gui.get_value('unet_lr' + suffix)}"
+                # commands += f" --unet_lr={gui.get_value('unet_lr' + suffix)}"
+                commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
+            else:
+                commands += f" --unet_lr={gui.get_value('unet_lr' + suffix)}"
+                commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
         else:
             commands += f" --learning_rate={gui.get_value('learning_rate' + suffix)}"
 
@@ -546,6 +580,12 @@ def RUN():
             url = tb.launch()
             print(f"Tensorflow listening on {url}")
             webbrowser.open_new_tab(url)
+
+        if gui.get_value('LoCON' + suffix):
+            commands += f" --network_module locon.locon_kohya"
+            additional_network_arguments = additional_network_args(suffix)
+            if additional_network_arguments:
+                commands += f" --network_args {additional_network_arguments}"
 
         commands += f" {gui.get_value('additional_parameters' + suffix)}\n"
         proc = subprocess.Popen("powershell", stdin = subprocess.PIPE).communicate(input = commands.encode())
@@ -939,6 +979,26 @@ def add_lora_tab():
                     gui.bind_item_handler_registry(append_instance_number("use_custom_log_prefix"),
                                                    append_instance_number("handler_checkbox"))
             with gui.tab(label="LyCORIS"):
-                gui.add_text("WIP")
+
+                gui.add_checkbox(tag=append_instance_number("LoCON"), label="LoCON",
+                                 callback=locon, default_value = False)
+
+                with gui.group(tag=append_instance_number("locon_dim"), horizontal=True, show=False):
+                    gui.add_text("LoCON dim")
+                    gui.add_input_text(tag=append_instance_number("locon_dim_string"),
+                                       hint="8",
+                                       width=-1)
+
+                with gui.group(tag=append_instance_number("locon_alpha"), horizontal=True, show=False):
+                    gui.add_text("LoCON alpha")
+                    gui.add_input_text(tag=append_instance_number("locon_alpha_string"),
+                                       hint="1",
+                                       width=-1)
+
+                with gui.group(tag=append_instance_number("dylora_unit"), horizontal=True):
+                    gui.add_text("DyLoRA unit value")
+                    gui.add_input_text(tag=append_instance_number("dylora_unit_string"),
+                                       hint="4",
+                                       width=-1)
 
     import_from_default_ini(append_instance_number("tab_lora"))
