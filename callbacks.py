@@ -4,10 +4,10 @@ import dearpygui.dearpygui as gui
 from ast import literal_eval
 from tensorboard import program
 
-current_version = "0.23"
+current_version = "0.24"
 default_script = "ltg_default.ini"
-app_width = 800
-app_height = 650
+app_width = 1000
+app_height = 750
 lora_tab_instances = 0
 active_tab = ""
 list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "use_vae",
@@ -23,7 +23,9 @@ list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "u
                  "max_data_loader_n_workers", "save_precision", "mixed_precision", "optimizer_type", "optimizer_args",
                  "logging_dir", "use_custom_log_prefix", "log_prefix", "enable_tensorboard", "check_tensors",
                  "LoCON", "locon_dim", "locon_dim_string", "locon_alpha", "locon_alpha_string",
-                 "dylora_unit", "dylora_unit_string",
+                 "LoHA", "loha_dim", "loha_dim_string", "loha_alpha", "loha_alpha_string",
+                 "DyLoRA", "dylora_unit", "dylora_unit_string", "dylora_dim", "dylora_dim_string", "dylora_alpha", "dylora_alpha_string",
+                 "min_snr_gamma", "noise_offset",
                  "additional_parameters"]
 
 
@@ -247,22 +249,80 @@ def locon(caller):
     if gui.get_value("LoCON" + suffix):
         gui.show_item("locon_dim" + suffix)
         gui.show_item("locon_alpha" + suffix)
+        gui.set_value("DyLoRA" + suffix, False)
+        dylora(suffix)
+        gui.set_value("LoHA" + suffix, False)
+        loha(suffix)
     if not gui.get_value("LoCON" + suffix):
         gui.hide_item("locon_dim" + suffix)
         gui.hide_item("locon_alpha" + suffix)
+        gui.set_value("locon_dim_string" + suffix, "")
+        gui.set_value("locon_alpha_string" + suffix, "")
+
+def loha(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("LoHA" + suffix):
+        gui.show_item("loha_dim" + suffix)
+        gui.show_item("loha_alpha" + suffix)
+        gui.set_value("DyLoRA" + suffix, False)
+        dylora(suffix)
+        gui.set_value("LoCON" + suffix, False)
+        locon(suffix)
+    if not gui.get_value("LoHA" + suffix):
+        gui.hide_item("loha_dim" + suffix)
+        gui.hide_item("loha_alpha" + suffix)
+        gui.set_value("loha_dim_string" + suffix, "")
+        gui.set_value("loha_alpha_string" + suffix, "")
+
+
+def dylora(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("DyLoRA" + suffix):
+        gui.show_item("dylora_dim" + suffix)
+        gui.show_item("dylora_alpha" + suffix)
+        gui.show_item("dylora_unit" + suffix)
+        gui.set_value("LoCON" + suffix, False)
+        locon(suffix)
+        gui.set_value("LoHA" + suffix, False)
+        loha(suffix)
+    if not gui.get_value("DyLoRA" + suffix):
+        gui.hide_item("dylora_dim" + suffix)
+        gui.hide_item("dylora_alpha" + suffix)
+        gui.hide_item("dylora_unit" + suffix)
+        gui.set_value("dylora_dim_string" + suffix, "")
+        gui.set_value("dylora_alpha_string" + suffix, "")
+        gui.set_value("dylora_unit_string" + suffix, "")
+
+def network_module(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value('locon_dim_string' + suffix) or gui.get_value('loha_dim_string' + suffix):
+        return f" \"--network_module=lycoris.kohya\" "
+    elif gui.get_value('dylora_dim_string' + suffix):
+        return f" \"--network_module=networks.dylora\" "
+
 
 def additional_network_args(caller):
     suffix = append_caller_instance(caller)
     all_args = ""
     if gui.get_value('locon_dim_string' + suffix):
         locon_dim = gui.get_value('locon_dim_string' + suffix)
-        all_args += f"\"conv_dim={locon_dim}\" "
-    if gui.get_value('locon_alpha_string' + suffix):
         locon_alpha = gui.get_value('locon_alpha_string' + suffix)
+        all_args += f"\"conv_dim={locon_dim}\" "
         all_args += f"\"conv_alpha={locon_alpha}\" "
-    if gui.get_value('dylora_unit_string' + suffix):
+        all_args += f"\"algo=locon\" "
+    elif gui.get_value('dylora_dim_string' + suffix):
+        dylora_dim = gui.get_value('dylora_dim_string' + suffix)
+        dylora_alpha = gui.get_value('dylora_alpha_string' + suffix)
         dylora_unit = gui.get_value('dylora_unit_string' + suffix)
+        all_args += f"\"conv_dim={dylora_dim}\" "
+        all_args += f"\"conv_alpha={dylora_alpha}\" "
         all_args += f"\"unit={dylora_unit}\" "
+    elif gui.get_value('loha_dim_string' + suffix):
+        loha_dim = gui.get_value('loha_dim_string' + suffix)
+        loha_alpha = gui.get_value('loha_alpha_string' + suffix)
+        all_args += f"\"conv_dim={loha_dim}\" "
+        all_args += f"\"conv_alpha={loha_alpha}\" "
+        all_args += f"\"algo=loha\" "
     return all_args
 
 
@@ -468,8 +528,7 @@ def RUN():
 
         # \"{ gui.get_value('' + suffix) }\"
         commands += f"accelerate launch --num_cpu_threads_per_process {gui.get_value('max_data_loader_n_workers' + suffix)}" \
-                    f" train_network.py --network_module=networks.lora" \
-                    f" --pretrained_model_name_or_path=\"{remove_trailing_slashes(gui.get_value('pretrained_model_name_or_path' + suffix))}\"" \
+                    f" train_network.py --pretrained_model_name_or_path=\"{remove_trailing_slashes(gui.get_value('pretrained_model_name_or_path' + suffix))}\"" \
                     f" --train_data_dir=\"{remove_trailing_slashes(gui.get_value('train_data_dir' + suffix))}\"" \
                     f" --output_dir=\"{remove_trailing_slashes(gui.get_value('output_dir' + suffix))}\"" \
                     f" --output_name=\"{gui.get_value('output_name' + suffix)}\"" \
@@ -581,11 +640,22 @@ def RUN():
             print(f"Tensorflow listening on {url}")
             webbrowser.open_new_tab(url)
 
-        if gui.get_value('LoCON' + suffix):
-            commands += f" --network_module locon.locon_kohya"
+        if gui.get_value('min_snr_gamma' + suffix):
+            min_snr_gamma = gui.get_value('min_snr_gamma' + suffix)
+            commands += f" --min_snr_gamma={min_snr_gamma}"
+
+        if gui.get_value('noise_offset' + suffix):
+            noise_offset = gui.get_value('noise_offset' + suffix)
+            commands += f" --noise_offset={noise_offset}"
+
+        if gui.get_value('LoCON' + suffix) or gui.get_value('LoHA' + suffix) or gui.get_value('DyLoRA' + suffix):
+            commands += network_module(suffix)
             additional_network_arguments = additional_network_args(suffix)
             if additional_network_arguments:
                 commands += f" --network_args {additional_network_arguments}"
+        else:
+            commands += f" --network_module=networks.lora"
+
 
         commands += f" {gui.get_value('additional_parameters' + suffix)}\n"
         proc = subprocess.Popen("powershell", stdin = subprocess.PIPE).communicate(input = commands.encode())
@@ -971,6 +1041,16 @@ def add_lora_tab():
                     gui.add_text("check_tensors")
                     gui.add_checkbox(tag=append_instance_number("check_tensors"), default_value=False)
 
+                with gui.group(horizontal = True):
+                    gui.add_text("min_snr_gamma")
+                    gui.add_input_text(tag = append_instance_number("min_snr_gamma"),
+                                       hint='5', width = -1)
+
+                with gui.group(horizontal = True):
+                    gui.add_text("noise_offset")
+                    gui.add_input_text(tag = append_instance_number("noise_offset"),
+                                       hint='0.05', width = -1)
+
                 with gui.group(tag = append_instance_number("group_custom_log_prefix"), horizontal = True,
                                show = False):
                     gui.add_text("log_prefix")
@@ -995,7 +1075,37 @@ def add_lora_tab():
                                        hint="1",
                                        width=-1)
 
-                with gui.group(tag=append_instance_number("dylora_unit"), horizontal=True):
+                gui.add_checkbox(tag=append_instance_number("LoHA"), label="LoHA",
+                                 callback=loha, default_value=False)
+
+                with gui.group(tag=append_instance_number("loha_dim"), horizontal=True, show=False):
+                    gui.add_text("LoHA dim")
+                    gui.add_input_text(tag=append_instance_number("loha_dim_string"),
+                                       hint="8",
+                                       width=-1)
+
+                with gui.group(tag=append_instance_number("loha_alpha"), horizontal=True, show=False):
+                    gui.add_text("LoHA alpha")
+                    gui.add_input_text(tag=append_instance_number("loha_alpha_string"),
+                                       hint="1",
+                                       width=-1)
+
+                gui.add_checkbox(tag=append_instance_number("DyLoRA"), label="DyLoRA",
+                                 callback=dylora, default_value=False)
+
+                with gui.group(tag=append_instance_number("dylora_dim"), horizontal=True, show=False):
+                    gui.add_text("DyLoRA dim")
+                    gui.add_input_text(tag=append_instance_number("dylora_dim_string"),
+                                       hint="8",
+                                       width=-1)
+
+                with gui.group(tag=append_instance_number("dylora_alpha"), horizontal=True, show=False):
+                    gui.add_text("DyLoRA alpha")
+                    gui.add_input_text(tag=append_instance_number("dylora_alpha_string"),
+                                       hint="1",
+                                       width=-1)
+
+                with gui.group(tag=append_instance_number("dylora_unit"), horizontal=True, show=False):
                     gui.add_text("DyLoRA unit value")
                     gui.add_input_text(tag=append_instance_number("dylora_unit_string"),
                                        hint="4",
