@@ -2,11 +2,12 @@ import math
 import os, webbrowser, subprocess, random, time, winreg
 import dearpygui.dearpygui as gui
 from ast import literal_eval
+from tensorboard import program
 
-current_version = "0.21"
+current_version = "0.24"
 default_script = "ltg_default.ini"
-app_width = 800
-app_height = 650
+app_width = 1000
+app_height = 750
 lora_tab_instances = 0
 active_tab = ""
 list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "use_vae",
@@ -15,11 +16,17 @@ list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "u
                  "train_time", "train_speed", "train_speed_type", "max_train_steps", "train_batch_size",
                  "save_every_n_epochs", "save_last_n_epochs", "use_separate_lr",
                  "learning_rate", "unet_lr", "text_encoder_lr",
-                 "lr_scheduler", "lr_warmup_ratio", "resolution", "clip_skip",
+                 "use_custom_scheduler", "scheduler_name", "scheduler_name_string", "lr_scheduler", "scheduler_args",
+                 "lr_warmup_ratio", "resolution", "clip_skip",
                  "network_dim", "network_alpha", "shuffle_caption", "max_token_length",
                  "keep_tokens", "seed", "gradient_checkpointing", "gradient_accumulation_steps",
-                 "max_data_loader_n_workers", "save_precision", "mixed_precision", "logging_dir",
-                 "use_custom_log_prefix", "log_prefix", "additional_parameters"]
+                 "max_data_loader_n_workers", "save_precision", "mixed_precision", "optimizer_type", "optimizer_args",
+                 "logging_dir", "use_custom_log_prefix", "log_prefix", "enable_tensorboard", "check_tensors",
+                 "LoCON", "locon_dim", "locon_dim_string", "locon_alpha", "locon_alpha_string",
+                 "LoHA", "loha_dim", "loha_dim_string", "loha_alpha", "loha_alpha_string",
+                 "DyLoRA", "dylora_unit", "dylora_unit_string", "dylora_dim", "dylora_dim_string", "dylora_alpha", "dylora_alpha_string",
+                 "min_snr_gamma", "noise_offset",
+                 "additional_parameters"]
 
 
 def _help(message):
@@ -227,6 +234,97 @@ def separate_lr(caller):
         gui.show_item("group_main_lr" + suffix)
         gui.hide_item("group_custom_lr" + suffix)
 
+def custom_scheduler_name(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("use_custom_scheduler" + suffix):
+        gui.show_item("scheduler_name" + suffix)
+        gui.hide_item("scheduler" + suffix)
+    if not gui.get_value("use_custom_scheduler" + suffix):
+        gui.show_item("scheduler" + suffix)
+        gui.hide_item("scheduler_name" + suffix)
+
+
+def locon(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("LoCON" + suffix):
+        gui.show_item("locon_dim" + suffix)
+        gui.show_item("locon_alpha" + suffix)
+        gui.set_value("DyLoRA" + suffix, False)
+        dylora(suffix)
+        gui.set_value("LoHA" + suffix, False)
+        loha(suffix)
+    if not gui.get_value("LoCON" + suffix):
+        gui.hide_item("locon_dim" + suffix)
+        gui.hide_item("locon_alpha" + suffix)
+        gui.set_value("locon_dim_string" + suffix, "")
+        gui.set_value("locon_alpha_string" + suffix, "")
+
+def loha(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("LoHA" + suffix):
+        gui.show_item("loha_dim" + suffix)
+        gui.show_item("loha_alpha" + suffix)
+        gui.set_value("DyLoRA" + suffix, False)
+        dylora(suffix)
+        gui.set_value("LoCON" + suffix, False)
+        locon(suffix)
+    if not gui.get_value("LoHA" + suffix):
+        gui.hide_item("loha_dim" + suffix)
+        gui.hide_item("loha_alpha" + suffix)
+        gui.set_value("loha_dim_string" + suffix, "")
+        gui.set_value("loha_alpha_string" + suffix, "")
+
+
+def dylora(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("DyLoRA" + suffix):
+        gui.show_item("dylora_dim" + suffix)
+        gui.show_item("dylora_alpha" + suffix)
+        gui.show_item("dylora_unit" + suffix)
+        gui.set_value("LoCON" + suffix, False)
+        locon(suffix)
+        gui.set_value("LoHA" + suffix, False)
+        loha(suffix)
+    if not gui.get_value("DyLoRA" + suffix):
+        gui.hide_item("dylora_dim" + suffix)
+        gui.hide_item("dylora_alpha" + suffix)
+        gui.hide_item("dylora_unit" + suffix)
+        gui.set_value("dylora_dim_string" + suffix, "")
+        gui.set_value("dylora_alpha_string" + suffix, "")
+        gui.set_value("dylora_unit_string" + suffix, "")
+
+def network_module(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value('locon_dim_string' + suffix) or gui.get_value('loha_dim_string' + suffix):
+        return f" \"--network_module=lycoris.kohya\" "
+    elif gui.get_value('dylora_dim_string' + suffix):
+        return f" \"--network_module=networks.dylora\" "
+
+
+def additional_network_args(caller):
+    suffix = append_caller_instance(caller)
+    all_args = ""
+    if gui.get_value('locon_dim_string' + suffix):
+        locon_dim = gui.get_value('locon_dim_string' + suffix)
+        locon_alpha = gui.get_value('locon_alpha_string' + suffix)
+        all_args += f"\"conv_dim={locon_dim}\" "
+        all_args += f"\"conv_alpha={locon_alpha}\" "
+        all_args += f"\"algo=locon\" "
+    elif gui.get_value('dylora_dim_string' + suffix):
+        dylora_dim = gui.get_value('dylora_dim_string' + suffix)
+        dylora_alpha = gui.get_value('dylora_alpha_string' + suffix)
+        dylora_unit = gui.get_value('dylora_unit_string' + suffix)
+        all_args += f"\"conv_dim={dylora_dim}\" "
+        all_args += f"\"conv_alpha={dylora_alpha}\" "
+        all_args += f"\"unit={dylora_unit}\" "
+    elif gui.get_value('loha_dim_string' + suffix):
+        loha_dim = gui.get_value('loha_dim_string' + suffix)
+        loha_alpha = gui.get_value('loha_alpha_string' + suffix)
+        all_args += f"\"conv_dim={loha_dim}\" "
+        all_args += f"\"conv_alpha={loha_alpha}\" "
+        all_args += f"\"algo=loha\" "
+    return all_args
+
 
 def combo_loras():
     active_tab = get_active_tab()
@@ -430,8 +528,7 @@ def RUN():
 
         # \"{ gui.get_value('' + suffix) }\"
         commands += f"accelerate launch --num_cpu_threads_per_process {gui.get_value('max_data_loader_n_workers' + suffix)}" \
-                    f" train_network.py --network_module=networks.lora" \
-                    f" --pretrained_model_name_or_path=\"{remove_trailing_slashes(gui.get_value('pretrained_model_name_or_path' + suffix))}\"" \
+                    f" train_network.py --pretrained_model_name_or_path=\"{remove_trailing_slashes(gui.get_value('pretrained_model_name_or_path' + suffix))}\"" \
                     f" --train_data_dir=\"{remove_trailing_slashes(gui.get_value('train_data_dir' + suffix))}\"" \
                     f" --output_dir=\"{remove_trailing_slashes(gui.get_value('output_dir' + suffix))}\"" \
                     f" --output_name=\"{gui.get_value('output_name' + suffix)}\"" \
@@ -450,9 +547,36 @@ def RUN():
                     # f" --unet_lr={round(gui.get_value('unet_lr' + suffix), 8)}" \
                     # f" --text_encoder_lr={round(gui.get_value('text_encoder_lr' + suffix), 8)}"
 
+        if gui.get_value('scheduler_name_string' + suffix):
+            commands += f" --lr_scheduler_type={gui.get_value('scheduler_name_string' + suffix)}"
+
+        if gui.get_value('scheduler_args' + suffix):
+            scheduler_args = gui.get_value('scheduler_args' + suffix)
+            if "--lr_scheduler_num_cycles" in scheduler_args:
+                commands += f" {gui.get_value('scheduler_args' + suffix)}"
+            elif "--lr_scheduler_power" in scheduler_args:
+                commands += f" {gui.get_value('scheduler_args' + suffix)}"
+            else:
+                commands += f" --lr_scheduler_args={gui.get_value('scheduler_args' + suffix)}"
+
+        optimizer_type = (gui.get_value('optimizer_type' + suffix))
+        if optimizer_type == "Old_version":  # old version compatibility
+            commands += f" --use_8bit_adam"
+        elif optimizer_type != "Old_version":
+            commands += f" --optimizer_type={gui.get_value('optimizer_type' + suffix)}"  # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.4
+                                                                                         # pip install lion-pytorch dadaptation в венве с сд-скриптс, чтобы юзать новые оптимайзеры
+
+        if gui.get_value('optimizer_args' + suffix):
+            commands += f" --optimizer_args {gui.get_value('optimizer_args' + suffix)}"
+
         if gui.get_value("use_separate_lr" + suffix):
-            commands += f" --unet_lr={gui.get_value('unet_lr' + suffix)}"
-            commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
+            if optimizer_type == "DAdaptation":
+                commands += f" --learning_rate={gui.get_value('unet_lr' + suffix)}"
+                # commands += f" --unet_lr={gui.get_value('unet_lr' + suffix)}"
+                commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
+            else:
+                commands += f" --unet_lr={gui.get_value('unet_lr' + suffix)}"
+                commands += f" --text_encoder_lr={gui.get_value('text_encoder_lr' + suffix)}"
         else:
             commands += f" --learning_rate={gui.get_value('learning_rate' + suffix)}"
 
@@ -508,9 +632,45 @@ def RUN():
                 log_prefix = gui.get_value('log_prefix' + suffix)
             commands += f" --log_prefix=\"{log_prefix}\""
 
+        if gui.get_value('enable_tensorboard' + suffix):
+            log_dir = gui.get_value('logging_dir' + suffix)
+            tb = program.TensorBoard(assets_zip_provider=lambda: open("webfiles.zip", "rb")) # Положить webfiles.zip рядом с экзешником, чтобы работало не только в состоянии скрипта
+            tb.configure(argv=[None, '--logdir', log_dir])
+            url = tb.launch()
+            print(f"Tensorflow listening on {url}")
+            webbrowser.open_new_tab(url)
+
+        if gui.get_value('min_snr_gamma' + suffix):
+            min_snr_gamma = gui.get_value('min_snr_gamma' + suffix)
+            commands += f" --min_snr_gamma={min_snr_gamma}"
+
+        if gui.get_value('noise_offset' + suffix):
+            noise_offset = gui.get_value('noise_offset' + suffix)
+            commands += f" --noise_offset={noise_offset}"
+
+        if gui.get_value('LoCON' + suffix) or gui.get_value('LoHA' + suffix) or gui.get_value('DyLoRA' + suffix):
+            commands += network_module(suffix)
+            additional_network_arguments = additional_network_args(suffix)
+            if additional_network_arguments:
+                commands += f" --network_args {additional_network_arguments}"
+        else:
+            commands += f" --network_module=networks.lora"
+
+
         commands += f" {gui.get_value('additional_parameters' + suffix)}\n"
         proc = subprocess.Popen("powershell", stdin = subprocess.PIPE).communicate(input = commands.encode())
         # proc
+        if gui.get_value('check_tensors' + suffix): # Этот говнокод положит рядом с логами для тензорборда прочеканные тензоры в тхт файл, по которым потом можно выполнить поиск через notepad++ например 0.0\r\n с search mode extended. При нажатии на count должно выдавать 6 при втором клип скипе, иначе тензоры в каких то слоях проебались.
+            log_dir = gui.get_value('logging_dir' + suffix)
+            lora_name = gui.get_value('output_name' + suffix)
+            lora_location = gui.get_value('output_dir' + suffix) + "\\" + gui.get_value('output_name' + suffix) + ".safetensors"
+            commands = "[console]::OutputEncoding = [text.encoding]::UTF8\n"
+            # блять jfs ебать ты чед
+            commands += "$env:PYTHONIOENCODING = 'utf-8'\n"
+            commands += f"Set-Location \"{gui.get_value('sd_scripts_path')}\"\n"
+            commands += ".\\venv\Scripts\\activate\n"
+            commands += f"python networks\\check_lora_weights.py {lora_location} > {log_dir}\\{lora_name}.txt"
+            proc = subprocess.Popen("powershell", stdin=subprocess.PIPE).communicate(input=commands.encode())
 
     gui.hide_item("modal_training")
 
@@ -543,6 +703,8 @@ def add_lora_tab():
                                      tag = append_instance_number("visibility_handler_custom_log_prefix"))
         gui.add_item_visible_handler(callback = separate_lr,
                                      tag = append_instance_number("visibility_handler_separate_lr"))
+        gui.add_item_visible_handler(callback=custom_scheduler_name,
+                                     tag=append_instance_number("visibility_handler_custom_lr"))
 
     with gui.item_handler_registry(tag = append_instance_number("handler_radio")):
         gui.add_item_visible_handler(callback = training_duration_method,
@@ -714,15 +876,38 @@ def add_lora_tab():
                             gui.add_input_text(tag = append_instance_number("text_encoder_lr"),
                                                default_value = '1e-3', width = -1, scientific = True)
 
-                    with gui.group(horizontal = True):
+                    with gui.group(horizontal=True):
+                        gui.add_text("optimizer_type")
+                        gui.add_combo(["Old_version", "AdamW", "AdamW8bit", "Lion", "SGDNesterov", "SGDNesterov8bit",
+                                       "DAdaptation", "AdaFactor"], tag=append_instance_number("optimizer_type"),
+                                      default_value="AdamW8bit", width=-1)
+
+                    with gui.group(horizontal=True):
+                        gui.add_text("optimizer_args")
+                        gui.add_input_text(tag=append_instance_number("optimizer_args"),
+                                           default_value="",
+                                           width=-1, height=100)
+
+                    gui.add_checkbox(tag = append_instance_number("use_custom_scheduler"), label="Custom scheduler",
+                                     callback = custom_scheduler_name, default_value = False)
+
+                    with gui.group(tag=append_instance_number("scheduler_name"), horizontal=True, show=False):
+                        gui.add_input_text(tag=append_instance_number("scheduler_name_string"),
+                                           hint="CosineAnnealingLR",
+                                           width=-1)
+
+                    with gui.group(horizontal = True, tag = append_instance_number("scheduler")):
                         gui.add_text("Планировщик")
                         gui.add_combo(["linear", "cosine", "cosine_with_restarts", "polynomial",
                                        "constant", "constant_with_warmup"],
                                       tag = append_instance_number("lr_scheduler"),
                                       default_value = "linear", width = -1, callback = scheduler)
 
-                    gui.bind_item_handler_registry(append_instance_number("lr_scheduler"),
-                                                   append_instance_number("handler_combo"))
+                    with gui.group(horizontal=True):
+                        gui.add_text("scheduler_args")
+                        gui.add_input_text(tag=append_instance_number("scheduler_args"),
+                                           default_value="", hint="--lr_scheduler_num_cycles; --lr_scheduler_power; T_max; etc",
+                                           width=-1, height=100)
 
                     with gui.group(tag = append_instance_number("group_warmup_ratio"), horizontal = True, show = True):
                         gui.add_text("Разогрев планировщика")
@@ -806,8 +991,8 @@ def add_lora_tab():
                     gui.add_text("custom_parameters")
                     gui.add_input_text(tag = append_instance_number("additional_parameters"),
                                        default_value = "--caption_extension=\".txt\" --prior_loss_weight=1 "
-                                                       "--enable_bucket --min_bucket_reso=256 --max_bucket_reso=1024 --use_8bit_adam "
-                                                       "--xformers --save_model_as=safetensors --cache_latents",
+                                                       "--enable_bucket --min_bucket_reso=256 --max_bucket_reso=1024 "
+                                                       "--xformers --save_model_as=safetensors --cache_latents --persistent_data_loader_workers", # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.2
                                        width = -1, height = 100)
                 with gui.group(horizontal = True):
                     gui.add_text("gradient_checkpointing")
@@ -825,7 +1010,7 @@ def add_lora_tab():
                           "значения могут негативно сказаться\n"
                           "скорости обучения.")
                     gui.add_input_text(tag = append_instance_number("max_data_loader_n_workers"),
-                                       default_value = '8', width = -1, decimal = True)
+                                       default_value = '4', width = -1, decimal = True)
 
                 with gui.group(horizontal = True):
                     gui.add_text("save_precision")
@@ -848,6 +1033,24 @@ def add_lora_tab():
                     gui.add_checkbox(tag = append_instance_number("use_custom_log_prefix"), default_value = False,
                                      callback = custom_log_prefix)
 
+                with gui.group(horizontal=True):
+                    gui.add_text("enable_tensorboard")
+                    gui.add_checkbox(tag=append_instance_number("enable_tensorboard"), default_value=False)
+
+                with gui.group(horizontal=True):
+                    gui.add_text("check_tensors")
+                    gui.add_checkbox(tag=append_instance_number("check_tensors"), default_value=False)
+
+                with gui.group(horizontal = True):
+                    gui.add_text("min_snr_gamma")
+                    gui.add_input_text(tag = append_instance_number("min_snr_gamma"),
+                                       hint='5', width = -1)
+
+                with gui.group(horizontal = True):
+                    gui.add_text("noise_offset")
+                    gui.add_input_text(tag = append_instance_number("noise_offset"),
+                                       hint='0.05', width = -1)
+
                 with gui.group(tag = append_instance_number("group_custom_log_prefix"), horizontal = True,
                                show = False):
                     gui.add_text("log_prefix")
@@ -855,5 +1058,57 @@ def add_lora_tab():
                                        default_value = "", width = -1)
                     gui.bind_item_handler_registry(append_instance_number("use_custom_log_prefix"),
                                                    append_instance_number("handler_checkbox"))
+            with gui.tab(label="LyCORIS"):
+
+                gui.add_checkbox(tag=append_instance_number("LoCON"), label="LoCON",
+                                 callback=locon, default_value = False)
+
+                with gui.group(tag=append_instance_number("locon_dim"), horizontal=True, show=False):
+                    gui.add_text("LoCON dim")
+                    gui.add_input_text(tag=append_instance_number("locon_dim_string"),
+                                       hint="8",
+                                       width=-1)
+
+                with gui.group(tag=append_instance_number("locon_alpha"), horizontal=True, show=False):
+                    gui.add_text("LoCON alpha")
+                    gui.add_input_text(tag=append_instance_number("locon_alpha_string"),
+                                       hint="1",
+                                       width=-1)
+
+                gui.add_checkbox(tag=append_instance_number("LoHA"), label="LoHA",
+                                 callback=loha, default_value=False)
+
+                with gui.group(tag=append_instance_number("loha_dim"), horizontal=True, show=False):
+                    gui.add_text("LoHA dim")
+                    gui.add_input_text(tag=append_instance_number("loha_dim_string"),
+                                       hint="8",
+                                       width=-1)
+
+                with gui.group(tag=append_instance_number("loha_alpha"), horizontal=True, show=False):
+                    gui.add_text("LoHA alpha")
+                    gui.add_input_text(tag=append_instance_number("loha_alpha_string"),
+                                       hint="1",
+                                       width=-1)
+
+                gui.add_checkbox(tag=append_instance_number("DyLoRA"), label="DyLoRA",
+                                 callback=dylora, default_value=False)
+
+                with gui.group(tag=append_instance_number("dylora_dim"), horizontal=True, show=False):
+                    gui.add_text("DyLoRA dim")
+                    gui.add_input_text(tag=append_instance_number("dylora_dim_string"),
+                                       hint="8",
+                                       width=-1)
+
+                with gui.group(tag=append_instance_number("dylora_alpha"), horizontal=True, show=False):
+                    gui.add_text("DyLoRA alpha")
+                    gui.add_input_text(tag=append_instance_number("dylora_alpha_string"),
+                                       hint="1",
+                                       width=-1)
+
+                with gui.group(tag=append_instance_number("dylora_unit"), horizontal=True, show=False):
+                    gui.add_text("DyLoRA unit value")
+                    gui.add_input_text(tag=append_instance_number("dylora_unit_string"),
+                                       hint="4",
+                                       width=-1)
 
     import_from_default_ini(append_instance_number("tab_lora"))
