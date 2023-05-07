@@ -535,7 +535,6 @@ def RUN():
                     f" --save_every_n_epochs={gui.get_value('save_every_n_epochs' + suffix)}" \
                     f" --save_last_n_epochs={gui.get_value('save_last_n_epochs' + suffix)}" \
                     f" --train_batch_size={gui.get_value('train_batch_size' + suffix)}" \
-                    f" --lr_scheduler={gui.get_value('lr_scheduler' + suffix)}" \
                     f" --resolution=\"{gui.get_value('resolution' + suffix)}\"" \
                     f" --network_dim={gui.get_value('network_dim' + suffix)}" \
                     f" --keep_tokens={gui.get_value('keep_tokens' + suffix)}" \
@@ -549,6 +548,8 @@ def RUN():
 
         if gui.get_value('scheduler_name_string' + suffix):
             commands += f" --lr_scheduler_type={gui.get_value('scheduler_name_string' + suffix)}"
+        else:
+            commands += f" --lr_scheduler={gui.get_value('lr_scheduler' + suffix)}"
 
         if gui.get_value('scheduler_args' + suffix):
             scheduler_args = gui.get_value('scheduler_args' + suffix)
@@ -557,7 +558,7 @@ def RUN():
             elif "--lr_scheduler_power" in scheduler_args:
                 commands += f" {gui.get_value('scheduler_args' + suffix)}"
             else:
-                commands += f" --lr_scheduler_args={gui.get_value('scheduler_args' + suffix)}"
+                commands += f" --lr_scheduler_args {gui.get_value('scheduler_args' + suffix)}"
 
         optimizer_type = (gui.get_value('optimizer_type' + suffix))
         if optimizer_type == "Old_version":  # old version compatibility
