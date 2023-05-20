@@ -4,7 +4,7 @@ import dearpygui.dearpygui as gui
 from ast import literal_eval
 from tensorboard import program
 
-current_version = "0.24"
+current_version = "0.25"
 default_script = "ltg_default.ini"
 app_width = 1000
 app_height = 750
@@ -20,7 +20,8 @@ list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "u
                  "lr_warmup_ratio", "resolution", "clip_skip",
                  "network_dim", "network_alpha", "shuffle_caption", "max_token_length",
                  "keep_tokens", "seed", "gradient_checkpointing", "gradient_accumulation_steps",
-                 "max_data_loader_n_workers", "save_precision", "mixed_precision", "optimizer_type", "optimizer_args",
+                 "max_data_loader_n_workers", "save_precision", "mixed_precision", "optimizer_type", "_optimizer_type", "optimizer_args",
+                 "use_custom_optimizer", "optimizer_name", "optimizer_name_string",
                  "logging_dir", "use_custom_log_prefix", "log_prefix", "enable_tensorboard", "check_tensors",
                  "LoCON", "locon_dim", "locon_dim_string", "locon_alpha", "locon_alpha_string",
                  "LoHA", "loha_dim", "loha_dim_string", "loha_alpha", "loha_alpha_string",
@@ -242,6 +243,19 @@ def custom_scheduler_name(caller):
     if not gui.get_value("use_custom_scheduler" + suffix):
         gui.show_item("scheduler" + suffix)
         gui.hide_item("scheduler_name" + suffix)
+        gui.set_value("scheduler_name_string" + suffix, "")
+
+
+def custom_optimizer_name(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("use_custom_optimizer" + suffix):
+        gui.show_item("optimizer_name" + suffix)
+        gui.hide_item("_optimizer_type" + suffix)
+        gui.set_value("optimizer_type" + suffix, "")
+    if not gui.get_value("use_custom_optimizer" + suffix):
+        gui.show_item("_optimizer_type" + suffix)
+        gui.hide_item("optimizer_name" + suffix)
+        gui.set_value("optimizer_name_string" + suffix, "")
 
 
 def locon(caller):
@@ -560,12 +574,17 @@ def RUN():
             else:
                 commands += f" --lr_scheduler_args {gui.get_value('scheduler_args' + suffix)}"
 
-        optimizer_type = (gui.get_value('optimizer_type' + suffix))
-        if optimizer_type == "Old_version":  # old version compatibility
-            commands += f" --use_8bit_adam"
-        elif optimizer_type != "Old_version":
-            commands += f" --optimizer_type={gui.get_value('optimizer_type' + suffix)}"  # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.4
-                                                                                         # pip install lion-pytorch dadaptation в венве с сд-скриптс, чтобы юзать новые оптимайзеры
+
+        if gui.get_value('optimizer_name_string' + suffix):
+            optimizer_type = (gui.get_value('optimizer_name_string' + suffix))               # https://github.com/kozistr/pytorch_optimizer
+            commands += f" --optimizer_type={optimizer_type}"
+        else:
+            optimizer_type = (gui.get_value('optimizer_type' + suffix))
+            if optimizer_type == "Old_version":  # old version compatibility
+                commands += f" --use_8bit_adam"
+            elif optimizer_type != "Old_version":
+                commands += f" --optimizer_type={optimizer_type}"  # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.4
+                                                                                             # pip install lion-pytorch dadaptation в венве с сд-скриптс, чтобы юзать новые оптимайзеры
 
         if gui.get_value('optimizer_args' + suffix):
             commands += f" --optimizer_args {gui.get_value('optimizer_args' + suffix)}"
@@ -706,6 +725,14 @@ def add_lora_tab():
                                      tag = append_instance_number("visibility_handler_separate_lr"))
         gui.add_item_visible_handler(callback=custom_scheduler_name,
                                      tag=append_instance_number("visibility_handler_custom_lr"))
+        gui.add_item_visible_handler(callback=custom_optimizer_name,
+                                     tag=append_instance_number("visibility_handler_custom_optimizer"))
+        gui.add_item_visible_handler(callback=locon,
+                                     tag=append_instance_number("visibility_handler_locon"))
+        gui.add_item_visible_handler(callback=loha,
+                                     tag=append_instance_number("visibility_handler_loha"))
+        gui.add_item_visible_handler(callback=dylora,
+                                     tag=append_instance_number("visibility_handler_dylora"))
 
     with gui.item_handler_registry(tag = append_instance_number("handler_radio")):
         gui.add_item_visible_handler(callback = training_duration_method,
@@ -877,9 +904,17 @@ def add_lora_tab():
                             gui.add_input_text(tag = append_instance_number("text_encoder_lr"),
                                                default_value = '1e-3', width = -1, scientific = True)
 
-                    with gui.group(horizontal=True):
-                        gui.add_text("optimizer_type")
-                        gui.add_combo(["Old_version", "AdamW", "AdamW8bit", "Lion", "SGDNesterov", "SGDNesterov8bit",
+                    gui.add_checkbox(tag=append_instance_number("use_custom_optimizer"), label="Custom optimizer",
+                                     callback=custom_optimizer_name, default_value=False)
+
+                    with gui.group(tag=append_instance_number("optimizer_name"), horizontal=True, show=False):
+                        gui.add_input_text(tag=append_instance_number("optimizer_name_string"),
+                                           hint="pytorch_optimizer.DAdaptAdan",                 # https://github.com/kozistr/pytorch_optimizer/blob/5ee6ed692c14f5ddbaec8ccb685fe312949c3a9a/docs/optimizer_api.rst
+                                           width=-1)
+
+                    with gui.group(horizontal=True, tag = append_instance_number("_optimizer_type")):
+                        gui.add_text("Optimizer type")
+                        gui.add_combo(["Old_version", "AdamW", "AdamW8bit", "Lion", "Lion8bit", "SGDNesterov", "SGDNesterov8bit",   #https://github.com/lucidrains/lion-pytorch     #https://github.com/kohya-ss/sd-scripts/releases/tag/v0.6.4 8-битная версия подъехала
                                        "DAdaptation", "AdaFactor"], tag=append_instance_number("optimizer_type"),
                                       default_value="AdamW8bit", width=-1)
 
@@ -992,7 +1027,7 @@ def add_lora_tab():
                     gui.add_text("custom_parameters")
                     gui.add_input_text(tag = append_instance_number("additional_parameters"),
                                        default_value = "--caption_extension=\".txt\" --prior_loss_weight=1 "
-                                                       "--enable_bucket --min_bucket_reso=256 --max_bucket_reso=1024 "
+                                                       "--enable_bucket --min_bucket_reso=256 --max_bucket_reso=1536 "
                                                        "--xformers --save_model_as=safetensors --cache_latents --persistent_data_loader_workers", # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.2
                                        width = -1, height = 100)
                 with gui.group(horizontal = True):
