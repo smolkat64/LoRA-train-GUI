@@ -2,7 +2,6 @@ import math
 import os, webbrowser, subprocess, random, time, winreg
 import dearpygui.dearpygui as gui
 from ast import literal_eval
-from tensorboard import program
 
 current_version = "0.25"
 default_script = "ltg_default.ini"
@@ -22,7 +21,7 @@ list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "u
                  "keep_tokens", "seed", "gradient_checkpointing", "gradient_accumulation_steps",
                  "max_data_loader_n_workers", "save_precision", "mixed_precision", "optimizer_type", "_optimizer_type", "optimizer_args",
                  "use_custom_optimizer", "optimizer_name", "optimizer_name_string",
-                 "logging_dir", "use_custom_log_prefix", "log_prefix", "enable_tensorboard", "check_tensors",
+                 "logging_dir", "use_custom_log_prefix", "log_prefix",
                  "LoCON", "locon_dim", "locon_dim_string", "locon_alpha", "locon_alpha_string",
                  "LoHA", "loha_dim", "loha_dim_string", "loha_alpha", "loha_alpha_string",
                  "DyLoRA", "dylora_unit", "dylora_unit_string", "dylora_dim", "dylora_dim_string", "dylora_alpha", "dylora_alpha_string",
@@ -518,6 +517,69 @@ def train_steps(caller, request):
             return f" --max_train_steps={int(max_train_steps)}"
 
 
+def lora_resize():
+    gui.show_item("modal_training")
+    resize_args = {'new_rank': gui.get_value('new_rank_value'), 'dynamic_method': gui.get_value('dynamic_method_value'),
+                   'dynamic_param': gui.get_value('dynamic_param_value'), 'lora_path': gui.get_value('lora_path_value'),
+                   'output_path': gui.get_value('output_path_value'), 'save_precision': gui.get_value('save_precision_value'),
+                   'device': gui.get_value('device_value')}
+    commands = "[console]::OutputEncoding = [text.encoding]::UTF8\n"
+    commands += "$env:PYTHONIOENCODING = 'utf-8'\n"
+    commands += f"Set-Location \"{gui.get_value('sd_scripts_path')}\"\n"
+    commands += ".\\venv\Scripts\\activate\n"
+    if resize_args['lora_path'].endswith('.safetensors'):
+        lora_name = resize_args['lora_path'].rsplit('\\', 1)
+        lora_without_suffix = lora_name[1].removesuffix('.safetensors')
+        commands += f"python networks\\resize_lora.py --save_precision {resize_args['save_precision']} --new_rank {resize_args['new_rank']}" \
+                    f" --save_to \"{resize_args['output_path']}\{lora_without_suffix}-{resize_args['new_rank']}rank.safetensors\" " \
+                    f" --model \"{resize_args['lora_path']}\" --device {resize_args['device']}" \
+                    f" --dynamic_method {resize_args['dynamic_method']} --dynamic_param {resize_args['dynamic_param']}"
+        proc = subprocess.Popen("powershell", stdin=subprocess.PIPE).communicate(input=commands.encode())
+    else:
+        loras = os.listdir(resize_args['lora_path'])
+        for i in loras:
+            if i.endswith('.safetensors'):
+                commands = "[console]::OutputEncoding = [text.encoding]::UTF8\n"
+                commands += "$env:PYTHONIOENCODING = 'utf-8'\n"
+                commands += f"Set-Location \"{gui.get_value('sd_scripts_path')}\"\n"
+                commands += ".\\venv\Scripts\\activate\n"
+                commands += f"python networks\\resize_lora.py --save_precision {resize_args['save_precision']} --new_rank {resize_args['new_rank']}" \
+                            f" --save_to \"{resize_args['output_path']}\{i.removesuffix('.safetensors')}-{resize_args['new_rank']}rank.safetensors\" " \
+                            f" --model \"{resize_args['lora_path']}\{i}\" --device {resize_args['device']}" \
+                            f" --dynamic_method {resize_args['dynamic_method']} --dynamic_param {resize_args['dynamic_param']}"
+                proc = subprocess.Popen("powershell", stdin=subprocess.PIPE).communicate(input=commands.encode())
+            else:
+                continue
+    return gui.hide_item("modal_training")
+
+
+def start_tensorboard():
+    log_dir = gui.get_value('log_path_value')
+    commands = "[console]::OutputEncoding = [text.encoding]::UTF8\n"
+    commands += "$env:PYTHONIOENCODING = 'utf-8'\n"
+    commands += f"Set-Location \"{gui.get_value('sd_scripts_path')}\"\n"
+    commands += ".\\venv\Scripts\\activate\n"
+    commands += f"Start-Process -NoNewWindow tensorboard -ArgumentList \"--logdir {log_dir}\""
+    proc = subprocess.Popen("powershell", stdin=subprocess.PIPE).communicate(input=commands.encode())
+    time.sleep(10)
+    webbrowser.open_new_tab(url="http://localhost:6006")
+    return
+
+
+def tensor_check():
+    lora_path = gui.get_value('lora_path_for_tensorcheck_value')
+    output_dir = gui.get_value('path_for_tensorchecker_output')
+    lora_name = lora_path.rsplit('\\', 1)
+    lora_without_suffix = lora_name[1].removesuffix('.safetensors')
+    commands = "[console]::OutputEncoding = [text.encoding]::UTF8\n"
+    commands += "$env:PYTHONIOENCODING = 'utf-8'\n"
+    commands += f"Set-Location \"{gui.get_value('sd_scripts_path')}\"\n"
+    commands += ".\\venv\Scripts\\activate\n"
+    commands += f"python networks\\check_lora_weights.py \"{lora_path}\" > \"{output_dir}\\{lora_without_suffix}.txt\""
+    proc = subprocess.Popen("powershell", stdin=subprocess.PIPE).communicate(input=commands.encode())
+    return
+
+
 def RUN():
     sd_scripts_path_to_registry()
     tab_count = calculate_lora_tab_count()
@@ -652,14 +714,6 @@ def RUN():
                 log_prefix = gui.get_value('log_prefix' + suffix)
             commands += f" --log_prefix=\"{log_prefix}\""
 
-        if gui.get_value('enable_tensorboard' + suffix):
-            log_dir = gui.get_value('logging_dir' + suffix)
-            tb = program.TensorBoard(assets_zip_provider=lambda: open("webfiles.zip", "rb")) # Положить webfiles.zip рядом с экзешником, чтобы работало не только в состоянии скрипта
-            tb.configure(argv=[None, '--logdir', log_dir])
-            url = tb.launch()
-            print(f"Tensorflow listening on {url}")
-            webbrowser.open_new_tab(url)
-
         if gui.get_value('min_snr_gamma' + suffix):
             min_snr_gamma = gui.get_value('min_snr_gamma' + suffix)
             commands += f" --min_snr_gamma={min_snr_gamma}"
@@ -680,17 +734,6 @@ def RUN():
         commands += f" {gui.get_value('additional_parameters' + suffix)}\n"
         proc = subprocess.Popen("powershell", stdin = subprocess.PIPE).communicate(input = commands.encode())
         # proc
-        if gui.get_value('check_tensors' + suffix): # Этот говнокод положит рядом с логами для тензорборда прочеканные тензоры в тхт файл, по которым потом можно выполнить поиск через notepad++ например 0.0\r\n с search mode extended. При нажатии на count должно выдавать 6 при втором клип скипе, иначе тензоры в каких то слоях проебались.
-            log_dir = gui.get_value('logging_dir' + suffix)
-            lora_name = gui.get_value('output_name' + suffix)
-            lora_location = gui.get_value('output_dir' + suffix) + "\\" + gui.get_value('output_name' + suffix) + ".safetensors"
-            commands = "[console]::OutputEncoding = [text.encoding]::UTF8\n"
-            # блять jfs ебать ты чед
-            commands += "$env:PYTHONIOENCODING = 'utf-8'\n"
-            commands += f"Set-Location \"{gui.get_value('sd_scripts_path')}\"\n"
-            commands += ".\\venv\Scripts\\activate\n"
-            commands += f"python networks\\check_lora_weights.py {lora_location} > {log_dir}\\{lora_name}.txt"
-            proc = subprocess.Popen("powershell", stdin=subprocess.PIPE).communicate(input=commands.encode())
 
     gui.hide_item("modal_training")
 
@@ -1069,14 +1112,6 @@ def add_lora_tab():
                     gui.add_checkbox(tag = append_instance_number("use_custom_log_prefix"), default_value = False,
                                      callback = custom_log_prefix)
 
-                with gui.group(horizontal=True):
-                    gui.add_text("enable_tensorboard")
-                    gui.add_checkbox(tag=append_instance_number("enable_tensorboard"), default_value=False)
-
-                with gui.group(horizontal=True):
-                    gui.add_text("check_tensors")
-                    gui.add_checkbox(tag=append_instance_number("check_tensors"), default_value=False)
-
                 with gui.group(horizontal = True):
                     gui.add_text("min_snr_gamma")
                     gui.add_input_text(tag = append_instance_number("min_snr_gamma"),
@@ -1146,5 +1181,69 @@ def add_lora_tab():
                     gui.add_input_text(tag=append_instance_number("dylora_unit_string"),
                                        hint="4",
                                        width=-1)
+            if calculate_lora_tab_count() > 1:
+                pass
+            else:
+                get_sd_scripts_path_from_registry()
+                with gui.tab(label="Utils"):
+                    with gui.collapsing_header(label="Start tensorboard"):
+                        with gui.group(horizontal=True):
+                            gui.add_text("Log path", tag="log_path")
+                            gui.add_input_text(tag="log_path_value",
+                                               hint="B:\lora\logs",
+                                               width=500)
+                            tensorboard_button = gui.add_button(label="Start", width=200, tag="button_tensorboard",
+                                                           callback=start_tensorboard)
+                    with gui.collapsing_header(label="Check tensors"):
+                        with gui.group(horizontal=True):
+                            gui.add_text("Lora path", tag="lora_path_for_tensorcheck")
+                            gui.add_input_text(tag="lora_path_for_tensorcheck_value",
+                                               hint="B:\lora\lora.safetensors",
+                                               width=300)
+                        with gui.group(horizontal=True):
+                            gui.add_text("Txt output path", tag="txt_output_path")
+                            gui.add_input_text(tag="path_for_tensorchecker_output",
+                                               hint="B:\lora",
+                                               width=300)
+                            tensorboard_button = gui.add_button(label="Check", width=200, tag="button_tensorcheck",
+                                                           callback=tensor_check)
+                    with gui.collapsing_header(label = "Resize lora"):
+                        with gui.group(horizontal=True):
+                            gui.add_text("New rank", tag="new_rank")
+                            gui.add_input_text(tag="new_rank_value",
+                                               hint="32",
+                                               default_value="32",
+                                               width=50)
+                            gui.add_text("Dynamic method", tag="dynamic_method")
+                            gui.add_input_text(tag="dynamic_method_value",
+                                               hint="sv_fro",
+                                               default_value="sv_fro",
+                                               width=150)
+                            gui.add_text("Dynamic param", tag="dynamic_param")
+                            gui.add_input_text(tag="dynamic_param_value",
+                                               hint="0.9",
+                                               default_value="0.9",
+                                               width=100)
+                            gui.add_text("Save precision", tag="save_precision")
+                            gui.add_input_text(tag="save_precision_value",
+                                               hint="bf16",
+                                               default_value="bf16",
+                                               width=50)
+                            gui.add_text("Device", tag="device")
+                            gui.add_input_text(tag="device_value",
+                                               hint="cuda",
+                                               default_value="cuda",
+                                               width=75)
+                        with gui.group(horizontal=True):
+                            gui.add_text("Lora path", tag="lora_path")
+                            gui.add_input_text(tag="lora_path_value",
+                                               hint="B:\lora\lora.safetensors or B:\lora",
+                                               width=350)
+                            gui.add_text("Output path", tag="output_path")
+                            gui.add_input_text(tag="output_path_value",
+                                               hint="B:\lora",
+                                               width=350)
+
+                        resize_button = gui.add_button(label="Resize", width=500, tag="button_resize", callback=lora_resize)
 
     import_from_default_ini(append_instance_number("tab_lora"))
