@@ -9,7 +9,7 @@ app_width = 1000
 app_height = 750
 lora_tab_instances = 0
 active_tab = ""
-list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "use_vae",
+list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "use_vae", "sdxl", "unet_only_sdxl",
                  "vae", "train_data_dir", "use_reg_data", "reg_data_dir",
                  "output_dir", "output_name", "training_duration_method", "max_train_epochs",
                  "train_time", "train_speed", "train_speed_type", "max_train_steps", "train_batch_size",
@@ -425,6 +425,15 @@ def sd_2x(caller):
         gui.hide_item("v_parameterization" + suffix)
 
 
+def sd_xl(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("sdxl" + suffix):
+        gui.show_item("unet_only_sdxl" + suffix)
+    else:
+        gui.set_value("unet_only_sdxl" + suffix, False)
+        gui.hide_item("unet_only_sdxl" + suffix)
+
+
 def reg_images(caller):
     suffix = append_caller_instance(caller)
     if gui.get_value("use_reg_data" + suffix):
@@ -628,9 +637,16 @@ def RUN():
         commands += f"Set-Location \"{gui.get_value('sd_scripts_path')}\"\n"
         commands += ".\\venv\Scripts\\activate\n"
 
+        if gui.get_value('sdxl' + suffix):
+            train_script = "sdxl_train_network.py"
+            if gui.get_value('unet_only_sdxl' + suffix):
+                train_script += " --network_train_unet_only"
+        else:
+            train_script = "train_network.py"
+
         # \"{ gui.get_value('' + suffix) }\"
         commands += f"accelerate launch --num_cpu_threads_per_process {gui.get_value('max_data_loader_n_workers' + suffix)}" \
-                    f" train_network.py --pretrained_model_name_or_path=\"{remove_trailing_slashes(gui.get_value('pretrained_model_name_or_path' + suffix))}\"" \
+                    f" {train_script} --pretrained_model_name_or_path=\"{remove_trailing_slashes(gui.get_value('pretrained_model_name_or_path' + suffix))}\"" \
                     f" --train_data_dir=\"{remove_trailing_slashes(gui.get_value('train_data_dir' + suffix))}\"" \
                     f" --output_dir=\"{remove_trailing_slashes(gui.get_value('output_dir' + suffix))}\"" \
                     f" --output_name=\"{gui.get_value('output_name' + suffix)}\"" \
@@ -799,6 +815,7 @@ def add_lora_tab():
 
     with gui.item_handler_registry(tag = append_instance_number("handler_checkbox")):
         gui.add_item_visible_handler(callback = sd_2x, tag = append_instance_number("visibility_handler_sd_2x"))
+        gui.add_item_visible_handler(callback = sd_xl, tag = append_instance_number("visibility_handler_sdxl"))
         gui.add_item_visible_handler(callback = use_vae, tag = append_instance_number("visibility_handler_use_vae"))
         gui.add_item_visible_handler(callback = reg_images,
                                      tag = append_instance_number("visibility_handler_reg_images"))
@@ -851,6 +868,14 @@ def add_lora_tab():
                                      label = "Stable Diffusion 2.x",
                                      before = append_instance_number("v_parameterization"))
                     gui.bind_item_handler_registry(append_instance_number("v2"),
+                                                   append_instance_number("handler_checkbox"))
+
+                with gui.group(horizontal = True):
+                    gui.add_checkbox(tag = append_instance_number("sdxl"), label = "SDXL",
+                                     show = True, default_value=False, callback=sd_xl)
+                    gui.add_checkbox(tag=append_instance_number("unet_only_sdxl"),
+                                     label="Train UNet only", default_value=False)
+                    gui.bind_item_handler_registry(append_instance_number("sdxl"),
                                                    append_instance_number("handler_checkbox"))
 
                 # vae checkbox
