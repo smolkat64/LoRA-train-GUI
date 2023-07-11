@@ -3,7 +3,7 @@ import os, webbrowser, subprocess, random, time, winreg
 import dearpygui.dearpygui as gui
 from ast import literal_eval
 
-current_version = "0.25"
+current_version = "0.26"
 default_script = "ltg_default.ini"
 app_width = 1000
 app_height = 750
@@ -25,7 +25,8 @@ list_settings = ["pretrained_model_name_or_path", "v_parameterization", "v2", "u
                  "LoCON", "locon_dim", "locon_dim_string", "locon_alpha", "locon_alpha_string",
                  "LoHA", "loha_dim", "loha_dim_string", "loha_alpha", "loha_alpha_string",
                  "DyLoRA", "dylora_unit", "dylora_unit_string", "dylora_dim", "dylora_dim_string", "dylora_alpha", "dylora_alpha_string",
-                 "min_snr_gamma", "noise_offset",
+                 "min_snr_gamma", "_offset_noise", "offset_noise", "scale_weight_normals",
+                 "_noise_amount", "noise_amount", "_noise_discount", "noise_discount", "noise_iterations", "_noise_iterations"
                  "additional_parameters"]
 
 
@@ -305,6 +306,31 @@ def dylora(caller):
         gui.set_value("dylora_dim_string" + suffix, "")
         gui.set_value("dylora_alpha_string" + suffix, "")
         gui.set_value("dylora_unit_string" + suffix, "")
+
+def offset_noise(caller):
+    suffix = append_caller_instance(caller)
+    if gui.get_value("offset_noise" + suffix) == "None":
+        gui.hide_item("_noise_amount" + suffix)
+        gui.hide_item("_noise_discount" + suffix)
+        gui.hide_item("_noise_iterations" + suffix)
+        gui.set_value("noise_amount" + suffix, "")
+        gui.set_value("noise_discount" + suffix, "")
+        gui.set_value("noise_iterations" + suffix, "")
+    elif gui.get_value("offset_noise" + suffix) == "Normal":
+        gui.show_item("_noise_amount" + suffix)
+        gui.set_value("noise_amount" + suffix, "0.05")
+        gui.hide_item("_noise_discount" + suffix)
+        gui.set_value("noise_discount" + suffix, "")
+        gui.hide_item("_noise_iterations" + suffix)
+        gui.set_value("noise_iterations" + suffix, "")
+    elif gui.get_value("offset_noise" + suffix) == "Pyramid":
+        gui.hide_item("_noise_amount" + suffix)
+        gui.show_item("_noise_discount" + suffix)
+        gui.show_item("_noise_iterations" + suffix)
+        gui.set_value("noise_amount" + suffix, "")
+        gui.set_value("noise_discount" + suffix, "0.15")
+        gui.set_value("noise_iterations" + suffix, "6")
+
 
 def network_module(caller):
     suffix = append_caller_instance(caller)
@@ -718,9 +744,23 @@ def RUN():
             min_snr_gamma = gui.get_value('min_snr_gamma' + suffix)
             commands += f" --min_snr_gamma={min_snr_gamma}"
 
-        if gui.get_value('noise_offset' + suffix):
-            noise_offset = gui.get_value('noise_offset' + suffix)
+        if gui.get_value("offset_noise" + suffix) == "None":
+            pass
+        elif gui.get_value("offset_noise" + suffix) == "Normal":
+            noise_offset = gui.get_value('noise_amount' + suffix)
             commands += f" --noise_offset={noise_offset}"
+        elif gui.get_value("offset_noise" + suffix) == "Pyramid":
+            # commands += f" --adaptive_noise_scale"
+            # noise_offset = gui.get_value('noise_amount' + suffix)
+            # commands += f" --noise_offset={noise_offset}"
+            noise_discount = gui.get_value('noise_discount' + suffix)
+            commands += f" --multires_noise_discount={noise_discount}"
+            noise_iterations = gui.get_value('noise_iterations' + suffix)
+            commands += f" --multires_noise_iterations={noise_iterations}"
+
+        if gui.get_value("scale_weight_normals" + suffix):
+            scale_weight_normals = gui.get_value('scale_weight_normals' + suffix)
+            commands += f" --scale_weight_norms={scale_weight_normals}"
 
         if gui.get_value('LoCON' + suffix) or gui.get_value('LoHA' + suffix) or gui.get_value('DyLoRA' + suffix):
             commands += network_module(suffix)
@@ -776,6 +816,8 @@ def add_lora_tab():
                                      tag=append_instance_number("visibility_handler_loha"))
         gui.add_item_visible_handler(callback=dylora,
                                      tag=append_instance_number("visibility_handler_dylora"))
+        gui.add_item_visible_handler(callback=offset_noise,
+                                     tag=append_instance_number("visibility_handler_offset_noise"))
 
     with gui.item_handler_registry(tag = append_instance_number("handler_radio")):
         gui.add_item_visible_handler(callback = training_duration_method,
@@ -958,7 +1000,7 @@ def add_lora_tab():
                     with gui.group(horizontal=True, tag = append_instance_number("_optimizer_type")):
                         gui.add_text("Optimizer type")
                         gui.add_combo(["Old_version", "AdamW", "AdamW8bit", "Lion", "Lion8bit", "SGDNesterov", "SGDNesterov8bit",   #https://github.com/lucidrains/lion-pytorch     #https://github.com/kohya-ss/sd-scripts/releases/tag/v0.6.4 8-битная версия подъехала
-                                       "DAdaptation", "AdaFactor"], tag=append_instance_number("optimizer_type"),
+                                       "DAdaptation", "AdaFactor", "Prodigy"], tag=append_instance_number("optimizer_type"),        #https://github.com/kohya-ss/sd-scripts/pull/585
                                       default_value="AdamW8bit", width=-1)
 
                     with gui.group(horizontal=True):
@@ -1071,7 +1113,7 @@ def add_lora_tab():
                     gui.add_input_text(tag = append_instance_number("additional_parameters"),
                                        default_value = "--caption_extension=\".txt\" --prior_loss_weight=1 "
                                                        "--enable_bucket --min_bucket_reso=256 --max_bucket_reso=1536 "
-                                                       "--xformers --save_model_as=safetensors --cache_latents --persistent_data_loader_workers", # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.2
+                                                       "--xformers --save_model_as=safetensors --cache_latents --cache_latents_to_disk --persistent_data_loader_workers", # https://github.com/kohya-ss/sd-scripts/releases/tag/v0.4.2
                                        width = -1, height = 100)
                 with gui.group(horizontal = True):
                     gui.add_text("gradient_checkpointing")
@@ -1118,9 +1160,24 @@ def add_lora_tab():
                                        hint='5', width = -1)
 
                 with gui.group(horizontal = True):
-                    gui.add_text("noise_offset")
-                    gui.add_input_text(tag = append_instance_number("noise_offset"),
-                                       hint='0.05', width = -1)
+                    gui.add_text("scale_weight_normals")
+                    gui.add_input_text(tag = append_instance_number("scale_weight_normals"),    #https://github.com/KohakuBlueleaf/LyCORIS/issues/57
+                                       hint='0.9', width = -1)                                  #https://github.com/kohya-ss/sd-scripts/pull/545
+
+                with gui.group(horizontal=True, tag=append_instance_number("_offset_noise")):
+                    gui.add_text("Offset noise")
+                    gui.add_combo(
+                        ["None", "Normal", "Pyramid"],
+                        tag=append_instance_number("offset_noise"), default_value="None", width=-1, callback=offset_noise)
+                with gui.group(horizontal = False, tag=append_instance_number("_noise_amount")):
+                    gui.add_text("Noise amount")
+                    gui.add_input_text(tag=append_instance_number("noise_amount"), width=-1)
+                with gui.group(horizontal=False, tag=append_instance_number("_noise_iterations")):
+                    gui.add_text("Pyramid iterations")
+                    gui.add_input_text(tag=append_instance_number("noise_iterations"), width=-1)
+                with gui.group(horizontal=False, tag=append_instance_number("_noise_discount")):
+                    gui.add_text("Pyramid discount")
+                    gui.add_input_text(tag=append_instance_number("noise_discount"), width=-1)
 
                 with gui.group(tag = append_instance_number("group_custom_log_prefix"), horizontal = True,
                                show = False):
